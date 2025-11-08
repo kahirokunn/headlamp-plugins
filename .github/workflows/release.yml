@@ -1,0 +1,140 @@
+name: Release Headlamp plugins (matrix)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    name: Release ${{ matrix.plugin }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plugin: envoy-gateway
+            dir: envoy-gateway
+          - plugin: knative
+            dir: knative
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ matrix.dir }}
+
+      - name: Audit dependencies
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: ${{ matrix.dir }}
+
+      - name: Build
+        run: npm run build
+        working-directory: ${{ matrix.dir }}
+
+      - name: Package
+        run: npm run package
+        working-directory: ${{ matrix.dir }}
+
+      - name: Resolve tarball path
+        id: tar
+        shell: bash
+        working-directory: ${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TARBALL="${PKG_NAME}-${PKG_VERSION}.tar.gz"
+          if [ ! -f "$TARBALL" ]; then
+            TARBALL=$(ls -1 *.tar.gz | head -n1)
+          fi
+          echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute checksum
+        id: sum
+        shell: bash
+        working-directory: ${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          SHASUM=$(sha256sum "${{ steps.tar.outputs.tarball }}" | awk '{print $1}')
+          echo "$SHASUM  ${{ steps.tar.outputs.tarball }}" > "${{ steps.tar.outputs.tarball }}.sha256"
+          echo "sha256=${SHASUM}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.plugin }}-assets
+          path: |
+            ${{ matrix.dir }}/${{ steps.tar.outputs.tarball }}
+            ${{ matrix.dir }}/${{ steps.tar.outputs.tarball }}.sha256
+
+      - name: Update ArtifactHub package file
+        id: ahub
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKG_NAME=$(node -p "require('./${{ matrix.dir }}/package.json').name")
+          PKG_VERSION=$(node -p "require('./${{ matrix.dir }}/package.json').version")
+          CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          TARBALL="${{ steps.tar.outputs.tarball }}"
+          CHECKSUM="${{ steps.sum.outputs.sha256 }}"
+          ARCHIVE_URL="https://github.com/${{ github.repository }}/releases/download/${{ env.TAG }}/${TARBALL}"
+
+          FILE="${{ matrix.dir }}/artifacthub-pkg.yml"
+          sed -i "s/^version:.*/version: \"${PKG_VERSION}\"/" "$FILE"
+          sed -i "s/^createdAt:.*/createdAt: \"${CREATED_AT}\"/" "$FILE"
+          sed -i "s|^\\s*headlamp/plugin/archive-url:.*|  headlamp/plugin/archive-url: \"${ARCHIVE_URL}\"|" "$FILE"
+          sed -i "s|^\\s*headlamp/plugin/archive-checksum:.*|  headlamp/plugin/archive-checksum: \"${CHECKSUM}\"|" "$FILE"
+          echo "pkg_name=$PKG_NAME" >> "$GITHUB_OUTPUT"
+          echo "pkg_version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR for ArtifactHub metadata update
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(${{ steps.ahub.outputs.pkg_name || matrix.plugin }}): update artifacthub-pkg.yml for ${{ steps.ahub.outputs.pkg_version || env.TAG }}"
+          title: "chore(${{ steps.ahub.outputs.pkg_name || matrix.plugin }}): update artifacthub-pkg.yml for ${{ steps.ahub.outputs.pkg_version || env.TAG }}"
+          body: |
+            Update ArtifactHub metadata for `${{ steps.ahub.outputs.pkg_name || matrix.plugin }}`.
+            - version: `${{ steps.ahub.outputs.pkg_version || env.TAG }}`
+            - archive-url/checksum updated for release `${{ env.TAG }}`
+          add-paths: |
+            ${{ matrix.dir }}/artifacthub-pkg.yml
+          branch: chore/artifacthub-update-${{ matrix.plugin }}-${{ env.TAG }}
+          base: ${{ github.event.repository.default_branch }}
+
+  publish_release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: release
+    permissions:
+      contents: write
+    steps:
+      - name: Download assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-assets
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist-assets/**/*.tar.gz
+            dist-assets/**/*.tar.gz.sha256
+          generate_release_notes: true

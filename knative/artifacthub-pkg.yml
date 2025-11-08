@@ -1,0 +1,11 @@
+version: "0.1.0"
+name: "knative-headlamp-plugin"
+displayName: "Knative Plugin"
+createdAt: "2025-11-08T00:00:00Z"
+logoURL: "https://github.com/cncf/artwork/blob/main/projects/knative/icon/color/knative-icon-color.png?raw=true"
+description: "A Headlamp plugin for visualizing and managing Knative Services. Provides GUI functionality to list and view service details, edit traffic splitting, update concurrency settings, perform redeploy/restart operations, and reference external/internal HTTPRoutes."
+annotations:
+  headlamp/plugin/archive-url: ""
+  headlamp/plugin/archive-checksum: ""
+  headlamp/plugin/version-compat: ""
+  headlamp/plugin/distro-compat: ""
