@@ -1,0 +1,170 @@
+import React from 'react';
+import { Box, Button, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/material';
+import type { KnativeRevision, KnativeService, TrafficTarget } from '../types/knative';
+import { getService, listRevisions, redeployService, restartService } from '../api/knative';
+import { listHttpRoutesByVisibilityForService } from '../api/envoy';
+import { useNotify } from './common/notifications/useNotify';
+import { useParams } from 'react-router-dom';
+import ConcurrencyEditor from './ConcurrencyEditor';
+import HttpRoutesSection from './HttpRoutesSection';
+import ConditionsSection from './ConditionsSection';
+import ServiceHeader from './ServiceHeader';
+import TrafficSplittingSection from './TrafficSplittingSection';
+import type { HTTPRoute } from '../api/envoy';
+
+export default function KnativeServiceDetails({
+  namespace: namespaceProp,
+  name: nameProp,
+}: {
+  namespace?: string;
+  name?: string;
+}) {
+  const params = useParams<{ namespace: string; name: string }>();
+  const namespace = namespaceProp ?? params.namespace ?? '';
+  const name = nameProp ?? params.name ?? '';
+  const [svc, setSvc] = React.useState<KnativeService | null>(null);
+  const [revs, setRevs] = React.useState<KnativeRevision[] | null>(null);
+  const [acting, setActing] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
+  const [externalHttpRoutes, setExternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
+  const [internalHttpRoutes, setInternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
+
+  const refetch = React.useCallback(async () => {
+    try {
+      const [s, r] = await Promise.all([
+        getService(namespace, name),
+        listRevisions(namespace, name),
+      ]);
+      setSvc(s);
+      setRevs(r);
+    } catch (err) {
+      setError((err as Error)?.message || 'Failed to load resource');
+    }
+  }, [namespace, name]);
+
+  React.useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  // HTTPRoute (external/internal) 一覧を取得
+  React.useEffect(() => {
+    let cancelled = false;
+    setExternalHttpRoutes(null);
+    setInternalHttpRoutes(null);
+    (async () => {
+      try {
+        const { external, internal } = await listHttpRoutesByVisibilityForService(namespace, name);
+        if (!cancelled) {
+          setExternalHttpRoutes(external);
+          setInternalHttpRoutes(internal);
+        }
+      } catch {
+        if (!cancelled) {
+          setExternalHttpRoutes([]);
+          setInternalHttpRoutes([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [namespace, name]);
+
+  const ready = React.useMemo(
+    () => svc?.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True',
+    [svc]
+  );
+
+  React.useEffect(() => {
+    if (!svc || ready) return;
+    const timer = window.setInterval(() => {
+      refetch();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [svc, ready, refetch]);
+
+  // no local traffic state; handled inside TrafficSplittingSection
+
+  async function handleRedeploy() {
+    if (!svc) return;
+    setActing('redeploy');
+    try {
+      await redeployService(namespace, name);
+      notifyInfo('Redeploy requested');
+      refetch();
+    } catch (err) {
+      const detail = (err as Error)?.message?.trim();
+      notifyError(detail ? `Redeploy failed: ${detail}` : 'Redeploy failed');
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function handleRestart() {
+    if (!svc) return;
+    setActing('restart');
+    try {
+      await restartService(namespace, svc);
+      notifyInfo('Restart requested');
+    } catch (err) {
+      const detail = (err as Error)?.message?.trim();
+      notifyError(detail ? `Restart failed: ${detail}` : 'Restart failed');
+    } finally {
+      setActing(null);
+    }
+  }
+
+  if (error) {
+    return (
+      <Box p={2}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
+  if (!svc || !revs) {
+    return (
+      <Box p={4} display="flex" justifyContent="center" alignItems="center">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Stack spacing={2} p={2}>
+      <ServiceHeader
+        serviceName={svc.metadata.name}
+        namespace={svc.metadata.namespace}
+        ready={!!ready}
+        acting={acting}
+        onRedeploy={handleRedeploy}
+        onRestart={handleRestart}
+      />
+
+      <ConditionsSection title="Conditions" conditions={svc.status?.conditions} />
+
+      <TrafficSplittingSection
+        namespace={namespace}
+        name={name}
+        service={svc}
+        revisions={revs}
+        onSaved={refetch}
+      />
+
+      <ConcurrencyEditor namespace={namespace} name={name} service={svc} onSaved={refetch} />
+
+      <HttpRoutesSection
+        title="HTTPRoutes (external)"
+        namespace={namespace}
+        routes={externalHttpRoutes}
+      />
+
+      <HttpRoutesSection
+        title="HTTPRoutes (internal)"
+        namespace={namespace}
+        routes={internalHttpRoutes}
+      />
+    </Stack>
+  );
+}
