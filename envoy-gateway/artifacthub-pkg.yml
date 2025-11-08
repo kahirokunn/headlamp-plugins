@@ -2,7 +2,7 @@ version: "0.1.0"
 name: "envoy-gateway"
 displayName: "Envoy Gateway Plugin"
 createdAt: "2025-11-08T13:45:01Z"
-logoURL: "https://github.com/cncf/artwork/blob/main/projects/envoy/icon/color/envoy-icon-color.svg"
+logoURL: "https://raw.githubusercontent.com/cncf/artwork/refs/heads/main/projects/envoy/icon/color/envoy-icon-color.svg"
 description: "A Headlamp plugin for Envoy Gateway. Provides GUI functionality to list and view HTTPRoute details from Gateway API, and detect/enable/edit Basic authentication, API Key authentication, retry policies (BackendTrafficPolicy), and IP access control (SecurityPolicy)."
 annotations:
   headlamp/plugin/archive-url: "https://github.com/kahirokunn/headlamp-plugins/releases/download/v0.1.1/envoy-gateway-0.1.0.tar.gz"
