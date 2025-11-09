@@ -91,6 +91,14 @@ jobs:
             ${{ matrix.dir }}/${{ steps.tar.outputs.tarball }}
             ${{ matrix.dir }}/${{ steps.tar.outputs.tarball }}.sha256
 
+      - name: Install yq
+        shell: bash
+        run: |
+          set -euo pipefail
+          YQ_VERSION="v4.44.3"
+          sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+
       - name: Update ArtifactHub package file
         shell: bash
         env:
@@ -116,10 +124,11 @@ jobs:
           VERSION_FROM_TAG="${TAG#v}"
 
           FILE="${{ matrix.dir }}/artifacthub-pkg.yml"
-          sed -i "s/^version:.*/version: \"${VERSION_FROM_TAG}\"/" "$FILE"
-          sed -i "s/^createdAt:.*/createdAt: \"${CREATED_AT}\"/" "$FILE"
-          sed -i "s|^\\s*headlamp/plugin/archive-url:.*|  headlamp/plugin/archive-url: \"${ARCHIVE_URL}\"|" "$FILE"
-          sed -i "s|^\\s*headlamp/plugin/archive-checksum:.*|  headlamp/plugin/archive-checksum: \"${CHECKSUM}\"|" "$FILE"
+          export VERSION_FROM_TAG CREATED_AT ARCHIVE_URL CHECKSUM
+          yq -i '.version = strenv(VERSION_FROM_TAG)' "$FILE"
+          yq -i '.createdAt = strenv(CREATED_AT)' "$FILE"
+          yq -i '.annotations["headlamp/plugin/archive-url"] = strenv(ARCHIVE_URL)' "$FILE"
+          yq -i '.annotations["headlamp/plugin/archive-checksum"] = strenv(CHECKSUM)' "$FILE"
           echo "pkg_name=$PKG_NAME" >> "$GITHUB_OUTPUT"
 
           if git diff --quiet -- "$FILE"; then
