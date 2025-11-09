@@ -1,14 +1,51 @@
 name: Release Headlamp plugins (matrix)
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 0.1.0)"
+        required: true
+        type: string
 
 jobs:
+  validate:
+    name: Validate version and tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      normalized_version: ${{ steps.norm.outputs.normalized_version }}
+      tag: ${{ steps.norm.outputs.tag }}
+    steps:
+      - name: Validate and normalize version
+        id: norm
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT="${{ inputs.version }}"
+          if [ -z "${INPUT:-}" ]; then
+            echo "::error::version input is required"
+            exit 1
+          fi
+          VERSION="${INPUT#v}"
+          VERSION="${VERSION#V}"
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Invalid semver: $VERSION"
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          if git ls-remote --exit-code --tags "https://github.com/${{ github.repository }}.git" "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists on remote."
+            exit 1
+          fi
+          echo "normalized_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
   release:
     name: Release ${{ matrix.plugin }}
     runs-on: ubuntu-latest
+    needs: validate
     permissions:
       contents: write
       pull-requests: write
@@ -21,12 +58,13 @@ jobs:
           - plugin: knative
             dir: knative
     env:
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ needs.validate.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -150,15 +188,41 @@ jobs:
             sleep 2
           done
 
-      # (push is done inside the update step above)
-
   publish_release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: release
+    needs:
+      - validate
+      - release
     permissions:
       contents: write
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
     steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Create and push tag
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists locally."
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists on remote. Skipping creation."
+          else
+            git tag -a "${TAG}" -m "Release ${TAG}"
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" "refs/tags/${TAG}"
+          fi
+
       - name: Download assets
         uses: actions/download-artifact@v4
         with:
@@ -168,7 +232,7 @@ jobs:
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ env.TAG }}
           files: |
             dist-assets/**/*.tar.gz
             dist-assets/**/*.tar.gz.sha256
