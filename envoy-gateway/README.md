@@ -13,3 +13,9 @@ Please refer to the [official installation guide](https://knative.dev/docs/insta
 ## Plugin Installation in Headlamp for Desktop
 
 Go to the Plugin Catalog, search for the Knative plugin, and click the Install button. Reload the UI (Navigation menu > Reload, or use the notification after installing the plugin) to see the new Knative item in the sidebar.
+
+## Demo
+
+<video src="assets/headlamp-envoy-gateway-plugin-demo.mp4" controls width="800">
+  Your browser does not support the video tag.
+</video>
