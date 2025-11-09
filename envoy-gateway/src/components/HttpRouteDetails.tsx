@@ -3,7 +3,6 @@ import { Box, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/mate
 import { useParams } from 'react-router-dom';
 import { getHttpRoute } from '../api/envoy';
 import BasicAuthSection from './sections/BasicAuthSection';
-import ApiKeyAuthSection from './sections/ApiKeyAuthSection';
 import RetrySection from './sections/RetrySection';
 import IpAccessSection from './sections/IpAccessSection';
 
@@ -78,7 +77,6 @@ export default function HttpRouteDetails() {
       {!!primaryHost && (
         <>
           <BasicAuthSection namespace={namespace} host={primaryHost} onChanged={refresh} />
-          <ApiKeyAuthSection namespace={namespace} host={primaryHost} onChanged={refresh} />
           <RetrySection namespace={namespace} host={primaryHost} onChanged={refresh} />
           <IpAccessSection namespace={namespace} host={primaryHost} onChanged={refresh} />
         </>
