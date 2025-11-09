@@ -68,7 +68,7 @@ export default function KnativeServiceDetails({
     refetchServiceAndRevisions();
   }, [refetchServiceAndRevisions]);
 
-  // autoscaling defaults 取得
+  // Fetch autoscaling defaults
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -84,7 +84,7 @@ export default function KnativeServiceDetails({
     };
   }, []);
 
-  // HTTPRoute (external/internal) 一覧を取得
+  // Fetch HTTPRoute list (external/internal)
   React.useEffect(() => {
     let cancelled = false;
     setExternalHttpRoutes(null);

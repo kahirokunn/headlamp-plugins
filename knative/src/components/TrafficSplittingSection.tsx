@@ -33,7 +33,7 @@ export default function TrafficSplittingSection({
   revisions,
   onSaved,
 }: Props) {
-  // 元 UI のロジックをそのまま移植
+  // Ported the original UI logic as-is
   const [revPercents, setRevPercents] = React.useState<Record<string, number>>({});
   const [revTags, setRevTags] = React.useState<Record<string, string[]>>({});
   const [latestPercent, setLatestPercent] = React.useState<number>(0);

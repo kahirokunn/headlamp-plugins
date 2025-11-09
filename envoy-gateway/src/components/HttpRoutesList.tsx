@@ -53,7 +53,7 @@ export default function HttpRoutesList() {
     if (v === '') return 'external';
     if (v === 'cluster-local') return 'internal';
     return '-';
-    // 非Knative由来のHTTPRouteでは可視性ラベルが無い場合があります
+    // Non-Knative HTTPRoutes may not have a visibility label
   }
 
   const namespaces = React.useMemo(() => {
