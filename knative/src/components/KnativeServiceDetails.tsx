@@ -33,7 +33,7 @@ export default function KnativeServiceDetails({
   const [revs, setRevs] = React.useState<KnativeRevision[] | null>(null);
   const [acting, setActing] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const { notifySuccess, notifyError, notifyInfo } = useNotify();
+  const { notifyError, notifyInfo } = useNotify();
   const [externalHttpRoutes, setExternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
   const [internalHttpRoutes, setInternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
   const [autoDefaults, setAutoDefaults] = React.useState<{

@@ -26,20 +26,16 @@ type Props = {
   onSaved?: () => void;
 };
 
-export default function TrafficSplittingSection({
-  namespace,
-  name,
-  service,
-  revisions,
-  onSaved,
-}: Props) {
-  // Ported the original UI logic as-is
+export default function TrafficSplittingSection({ namespace, name, service, revisions, onSaved }: Props) {
   const [revPercents, setRevPercents] = React.useState<Record<string, number>>({});
   const [revTags, setRevTags] = React.useState<Record<string, string[]>>({});
   const [latestPercent, setLatestPercent] = React.useState<number>(0);
   const [latestTags, setLatestTags] = React.useState<string[]>([]);
   const [savingTraffic, setSavingTraffic] = React.useState(false);
   const { notifySuccess, notifyError } = useNotify();
+  const revTagInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
+  const latestTagInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [pendingTagInputs, setPendingTagInputs] = React.useState<Record<string, string>>({});
 
   React.useEffect(() => {
     if (!service || !revisions) return;
@@ -136,30 +132,109 @@ export default function TrafficSplittingSection({
     return null;
   }, [revPercents, totalTraffic, latestPercent, hasDuplicateTags, revisions]);
 
-  const isTrafficValid = !trafficValidationError;
+  const pendingTagError = React.useMemo(
+    () =>
+      Object.values(pendingTagInputs).some(v => Boolean(v?.trim()))
+        ? 'There are unconfirmed tags. Please press Enter to confirm.'
+        : null,
+    [pendingTagInputs]
+  );
+  const combinedValidationError = trafficValidationError || pendingTagError;
+  const isTrafficValid = !combinedValidationError;
 
   async function onSaveTraffic() {
     if (!service || !revisions) return;
-    if (!isTrafficValid) return;
     setSavingTraffic(true);
     try {
-      const traffic: TrafficTarget[] = [];
+      // 1) Build a merged result that includes in-progress (unconfirmed) tag input
+      const mergedRevTags: Record<string, string[]> = {};
       const revisionNames = Array.from(
-        new Set([...Object.keys(revPercents), ...Object.keys(revTags)])
+        new Set([
+          ...Object.keys(revPercents),
+          ...Object.keys(revTags),
+          ...Object.keys(revTagInputRefs.current),
+        ])
       );
       revisionNames.forEach(revisionName => {
-        const numericPercent = Number(revPercents[revisionName] ?? 0) || 0;
-        const tags = revTags[revisionName] || [];
-        const uniqueTags = Array.from(
-          new Set(tags.map(tag => tag.trim()).filter(tag => tag.length > 0))
+        const base = revTags[revisionName] || [];
+        const pending = (revTagInputRefs.current[revisionName]?.value || '').trim();
+        const unique = Array.from(
+          new Set([...base, ...(pending ? [pending] : [])].map(v => v.trim()).filter(Boolean))
         );
+        mergedRevTags[revisionName] = unique;
+      });
+      const pendingLatest = (latestTagInputRef.current?.value || '').trim();
+      const mergedLatestTags = Array.from(
+        new Set(
+          [...latestTags, ...(pendingLatest ? [pendingLatest] : [])]
+            .map(v => v.trim())
+            .filter(Boolean)
+        )
+      );
+
+      // 2) Validation (also check duplicates after merging)
+      const revisionTotal = Object.values(revPercents).reduce(
+        (acc, v) => acc + (Number(v) || 0),
+        0
+      );
+      const total = revisionTotal + (Number(latestPercent) || 0);
+      let validationError: string | null = null;
+      // 0-100 range check
+      for (const key of Object.keys(revPercents)) {
+        const val = Number(revPercents[key]);
+        if (Number.isNaN(val) || val < 0 || val > 100) {
+          validationError = 'Traffic percentages must be between 0 and 100';
+          break;
+        }
+      }
+      if (!validationError) {
+        const lp = Number(latestPercent);
+        if (Number.isNaN(lp) || lp < 0 || lp > 100) {
+          validationError = 'Latest revision percent must be between 0 and 100';
+        }
+      }
+      if (!validationError && total !== 100) {
+        validationError = 'Total traffic must equal 100%';
+      }
+      if (!validationError) {
+        const seen = new Set<string>();
+        const all: string[] = [];
+        Object.values(mergedRevTags).forEach(list => list.forEach(t => all.push(t)));
+        mergedLatestTags.forEach(t => all.push(t));
+        for (const t of all) {
+          if (seen.has(t)) {
+            validationError = 'Tags must be unique';
+            break;
+          }
+          seen.add(t);
+        }
+      }
+      if (validationError) {
+        // Also reflect the in-progress input values into UI state
+        setRevTags(prev => {
+          const next: Record<string, string[]> = { ...prev };
+          revisionNames.forEach(name => {
+            next[name] = mergedRevTags[name] || [];
+          });
+          return next;
+        });
+        setLatestTags(mergedLatestTags);
+        notifyError(validationError);
+        return;
+      }
+
+      // 3) Build Traffic payload for submission (using merged tags)
+      const traffic: TrafficTarget[] = [];
+      revisionNames.forEach(revisionName => {
+        const numericPercent = Number(revPercents[revisionName] ?? 0) || 0;
+        const tags = mergedRevTags[revisionName] || [];
         if (numericPercent > 0) {
           traffic.push({
             revisionName,
             percent: numericPercent,
           });
         }
-        uniqueTags.forEach(tag => {
+        tags.forEach(tag => {
           traffic.push({
             revisionName,
             percent: 0,
@@ -167,9 +242,6 @@ export default function TrafficSplittingSection({
           });
         });
       });
-      const trimmedLatestTags = Array.from(
-        new Set(latestTags.map(tag => tag.trim()).filter(tag => tag.length > 0))
-      );
       const latestPercentValue = Number(latestPercent) || 0;
       if (latestPercentValue > 0) {
         traffic.push({
@@ -177,14 +249,31 @@ export default function TrafficSplittingSection({
           percent: latestPercentValue,
         });
       }
-      trimmedLatestTags.forEach(tag => {
+      mergedLatestTags.forEach(tag => {
         traffic.push({
           latestRevision: true,
           percent: 0,
           tag,
         });
       });
+
       await updateTraffic(namespace, name, traffic);
+
+      // 4) On success, sync UI state to merged values and clear inputs
+      setRevTags(prev => {
+        const next: Record<string, string[]> = { ...prev };
+        revisionNames.forEach(name => {
+          next[name] = mergedRevTags[name] || [];
+        });
+        return next;
+      });
+      setLatestTags(mergedLatestTags);
+      revisionNames.forEach(name => {
+        const ref = revTagInputRefs.current[name];
+        if (ref) ref.value = '';
+      });
+      if (latestTagInputRef.current) latestTagInputRef.current.value = '';
+
       notifySuccess('Traffic updated');
       onSaved?.();
     } catch (err) {
@@ -291,6 +380,11 @@ export default function TrafficSplittingSection({
                               ...prev,
                               [r.metadata.name]: unique,
                             }));
+                            // タグ確定後は未確定入力のヘルパーを消す
+                            setPendingTagInputs(prev => ({
+                              ...prev,
+                              [r.metadata.name]: '',
+                            }));
                           }}
                           renderTags={(value, getTagProps) =>
                             value.map((option, index) => (
@@ -302,7 +396,30 @@ export default function TrafficSplittingSection({
                               />
                             ))
                           }
-                          renderInput={params => <TextField {...params} placeholder="Add tag" />}
+                          renderInput={params => (
+                            <TextField
+                              {...params}
+                              placeholder="Add tag"
+                              inputRef={el => {
+                                revTagInputRefs.current[r.metadata.name] = el;
+                              }}
+                              error={Boolean(pendingTagInputs[r.metadata.name]?.trim())}
+                              helperText={
+                                pendingTagInputs[r.metadata.name]?.trim()
+                                  ? 'Press Enter to confirm the tag'
+                                  : undefined
+                              }
+                              onChange={e => {
+                                // Preserve Autocomplete's internal onChange as well
+                                (params.inputProps as any)?.onChange?.(e as any);
+                                const val = (e.target as HTMLInputElement).value;
+                                setPendingTagInputs(prev => ({
+                                  ...prev,
+                                  [r.metadata.name]: val,
+                                }));
+                              }}
+                            />
+                          )}
                           sx={{ minWidth: 220 }}
                         />
                       </TableCell>
@@ -384,6 +501,11 @@ export default function TrafficSplittingSection({
                             new Set((newValue as string[]).map(v => v.trim()).filter(Boolean))
                           );
                           setLatestTags(unique);
+                          // Clear the helper for unconfirmed input after tag confirmation
+                          setPendingTagInputs(prev => ({
+                            ...prev,
+                            latest: '',
+                          }));
                         }}
                         renderTags={(value, getTagProps) =>
                           value.map((option, index) => (
@@ -395,7 +517,27 @@ export default function TrafficSplittingSection({
                             />
                           ))
                         }
-                        renderInput={params => <TextField {...params} placeholder="Add tag" />}
+                        renderInput={params => (
+                          <TextField
+                            {...params}
+                            placeholder="Add tag"
+                            inputRef={latestTagInputRef}
+                            error={Boolean(pendingTagInputs.latest?.trim())}
+                            helperText={
+                              pendingTagInputs.latest?.trim()
+                                ? 'Press Enter to confirm the tag'
+                                : undefined
+                            }
+                            onChange={e => {
+                              (params.inputProps as any)?.onChange?.(e as any);
+                              const val = (e.target as HTMLInputElement).value;
+                              setPendingTagInputs(prev => ({
+                                ...prev,
+                                latest: val,
+                              }));
+                            }}
+                          />
+                        )}
                         sx={{ minWidth: 220 }}
                       />
                     </TableCell>
