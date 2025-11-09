@@ -1,15 +1,13 @@
-# knative-headlamp-plugin
+# Knative
 
-This is the default template README for [Headlamp Plugins](https://github.com/kubernetes-sigs/headlamp).
+A Headlamp plugin for visualizing and managing Knative Services. Knative is a Kubernetes-based platform for deploying and managing serverless workloads. It provides automatic scaling, traffic management, and simplified deployment workflows for containerized applications.
 
-- The description of your plugin should go here.
-- You should also edit the package.json file meta data (like name and description).
+This plugin adds a new item (Knative) to the sidebar and provides GUI functionality to list and view service details, edit traffic splitting, update concurrency settings, perform redeploy/restart operations, and reference external/internal HTTPRoutes.
 
-## Developing Headlamp plugins
+## Knative Installation
 
-For more information on developing Headlamp plugins, please refer to:
+Please refer to the [official installation guide](https://knative.dev/docs/install/) for Knative to learn to install it.
 
-- [Getting Started](https://headlamp.dev/docs/latest/development/plugins/), How to create a new Headlamp plugin.
-- [API Reference](https://headlamp.dev/docs/latest/development/api/), API documentation for what you can do
-- [UI Component Storybook](https://headlamp.dev/docs/latest/development/frontend/#storybook), pre-existing components you can use when creating your plugin.
-- [Plugin Examples](https://github.com/kubernetes-sigs/headlamp/tree/main/plugins/examples), Example plugins you can look at to see how it's done.
+## Plugin Installation in Headlamp for Desktop
+
+Go to the Plugin Catalog, search for the Knative plugin, and click the Install button. Reload the UI (Navigation menu > Reload, or use the notification after installing the plugin) to see the new Knative item in the sidebar.

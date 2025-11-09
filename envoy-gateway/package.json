@@ -1,7 +1,7 @@
 {
-  "name": "envoy-gateway",
+  "name": "envoy-gateway-headlamp-plugin",
   "version": "0.1.0",
-  "description": "Your Headlamp plugin",
+  "description": "A Headlamp plugin for Envoy Gateway. Provides GUI functionality to list and view HTTPRoute details from Gateway API, and detect/enable/edit Basic authentication, API Key authentication, retry policies (BackendTrafficPolicy), and IP access control (SecurityPolicy).",
   "scripts": {
     "start": "headlamp-plugin start",
     "build": "headlamp-plugin build",
@@ -20,7 +20,10 @@
     "kubernetes",
     "kubernetes-ui",
     "kubernetes-debugging",
-    "plugins"
+    "plugins",
+    "envoy",
+    "envoy-gateway",
+    "gateway-api"
   ],
   "prettier": "@headlamp-k8s/eslint-config/prettier-config",
   "eslintConfig": {

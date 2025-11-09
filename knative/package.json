@@ -1,7 +1,7 @@
 {
   "name": "knative-headlamp-plugin",
   "version": "0.1.0",
-  "description": "Your Headlamp plugin",
+  "description": "A Headlamp plugin for visualizing and managing Knative Services. Provides GUI functionality to list and view service details, edit traffic splitting, update concurrency settings, perform redeploy/restart operations, and reference external/internal HTTPRoutes.",
   "scripts": {
     "start": "headlamp-plugin start",
     "build": "headlamp-plugin build",
@@ -20,7 +20,8 @@
     "kubernetes",
     "kubernetes-ui",
     "kubernetes-debugging",
-    "plugins"
+    "plugins",
+    "knative"
   ],
   "prettier": "@headlamp-k8s/eslint-config/prettier-config",
   "eslintConfig": {

@@ -1,15 +1,13 @@
-# envoy-gateway
+# Envoy Gateway
 
-This is the default template README for [Headlamp Plugins](https://github.com/kubernetes-sigs/headlamp).
+A Headlamp plugin for Envoy Gateway. Provides GUI functionality to list and view HTTPRoute details from Gateway API, and detect/enable/edit Basic authentication, API Key authentication, retry policies (BackendTrafficPolicy), and IP access control (SecurityPolicy).
 
-- The description of your plugin should go here.
-- You should also edit the package.json file meta data (like name and description).
+This plugin adds a new item (Envoy Gateway) to the sidebar and provides GUI functionality to manage Gateway API resources and Envoy Gateway-specific policies.
 
-## Developing Headlamp plugins
+## Knative Installation
 
-For more information on developing Headlamp plugins, please refer to:
+Please refer to the [official installation guide](https://knative.dev/docs/install/) for Knative to learn to install it.
 
-- [Getting Started](https://headlamp.dev/docs/latest/development/plugins/), How to create a new Headlamp plugin.
-- [API Reference](https://headlamp.dev/docs/latest/development/api/), API documentation for what you can do
-- [UI Component Storybook](https://headlamp.dev/docs/latest/development/frontend/#storybook), pre-existing components you can use when creating your plugin.
-- [Plugin Examples](https://github.com/kubernetes-sigs/headlamp/tree/main/plugins/examples), Example plugins you can look at to see how it's done.
+## Plugin Installation in Headlamp for Desktop
+
+Go to the Plugin Catalog, search for the Knative plugin, and click the Install button. Reload the UI (Navigation menu > Reload, or use the notification after installing the plugin) to see the new Knative item in the sidebar.
