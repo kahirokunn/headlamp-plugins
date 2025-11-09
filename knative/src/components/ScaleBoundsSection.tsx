@@ -34,8 +34,12 @@ export default function ScaleBoundsSection({
 }) {
   const anns = service?.spec?.template?.metadata?.annotations ?? {};
 
-  const [minScale, setMinScale] = React.useState<string>(anns['autoscaling.knative.dev/min-scale'] ?? '');
-  const [maxScale, setMaxScale] = React.useState<string>(anns['autoscaling.knative.dev/max-scale'] ?? '');
+  const [minScale, setMinScale] = React.useState<string>(
+    anns['autoscaling.knative.dev/min-scale'] ?? ''
+  );
+  const [maxScale, setMaxScale] = React.useState<string>(
+    anns['autoscaling.knative.dev/max-scale'] ?? ''
+  );
   const [initialScale, setInitialScale] = React.useState<string>(
     anns['autoscaling.knative.dev/initial-scale'] ?? ''
   );
@@ -45,7 +49,9 @@ export default function ScaleBoundsSection({
   const [scaleDownDelay, setScaleDownDelay] = React.useState<string>(
     anns['autoscaling.knative.dev/scale-down-delay'] ?? ''
   );
-  const [stableWindow, setStableWindow] = React.useState<string>(anns['autoscaling.knative.dev/window'] ?? '');
+  const [stableWindow, setStableWindow] = React.useState<string>(
+    anns['autoscaling.knative.dev/window'] ?? ''
+  );
   const [saving, setSaving] = React.useState(false);
 
   const { notifySuccess, notifyError } = useNotify();
@@ -209,5 +215,3 @@ export default function ScaleBoundsSection({
     </Paper>
   );
 }
-
-

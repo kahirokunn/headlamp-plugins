@@ -26,7 +26,13 @@ type Props = {
   onSaved?: () => void;
 };
 
-export default function TrafficSplittingSection({ namespace, name, service, revisions, onSaved }: Props) {
+export default function TrafficSplittingSection({
+  namespace,
+  name,
+  service,
+  revisions,
+  onSaved,
+}: Props) {
   const [revPercents, setRevPercents] = React.useState<Record<string, number>>({});
   const [revTags, setRevTags] = React.useState<Record<string, string[]>>({});
   const [latestPercent, setLatestPercent] = React.useState<number>(0);

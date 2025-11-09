@@ -138,7 +138,9 @@ export default function AutoscalingSettings({
               labelId="metric-label"
               label="Metric"
               value={metric}
-              onChange={(e: SelectChangeEvent<string>) => setMetric((e.target.value as MetricType) || '')}
+              onChange={(e: SelectChangeEvent<string>) =>
+                setMetric((e.target.value as MetricType) || '')
+              }
             >
               <MenuItem value="">
                 <em>
@@ -180,7 +182,9 @@ export default function AutoscalingSettings({
             onChange={e => setUtil(e.target.value)}
             inputProps={{ min: 1, max: 100, step: 1, inputMode: 'numeric' }}
             helperText={
-              resolvedDefaultUtil != null ? `Optional (default: ${resolvedDefaultUtil}%)` : 'Optional'
+              resolvedDefaultUtil != null
+                ? `Optional (default: ${resolvedDefaultUtil}%)`
+                : 'Optional'
             }
           />
         </Stack>
@@ -223,5 +227,3 @@ export default function AutoscalingSettings({
     </Paper>
   );
 }
-
-
