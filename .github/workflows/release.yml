@@ -43,6 +43,14 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
         working-directory: ${{ matrix.dir }}
 
+      - name: Sync package.json version with tag
+        shell: bash
+        working-directory: ${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          VERSION_FROM_TAG="${TAG#v}"
+          npm version --no-git-tag-version "$VERSION_FROM_TAG"
+
       - name: Build
         run: npm run build
         working-directory: ${{ matrix.dir }}
@@ -58,8 +66,8 @@ jobs:
         run: |
           set -euo pipefail
           PKG_NAME=$(node -p "require('./package.json').name")
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          TARBALL="${PKG_NAME}-${PKG_VERSION}.tar.gz"
+          VERSION_FROM_TAG="${TAG#v}"
+          TARBALL="${PKG_NAME}-${VERSION_FROM_TAG}.tar.gz"
           if [ ! -f "$TARBALL" ]; then
             TARBALL=$(ls -1 *.tar.gz | head -n1)
           fi
@@ -101,19 +109,18 @@ jobs:
           git checkout "${DEFAULT_BRANCH}"
 
           PKG_NAME=$(node -p "require('./${{ matrix.dir }}/package.json').name")
-          PKG_VERSION=$(node -p "require('./${{ matrix.dir }}/package.json').version")
           CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           TARBALL="${{ steps.tar.outputs.tarball }}"
           CHECKSUM="${{ steps.sum.outputs.sha256 }}"
           ARCHIVE_URL="https://github.com/${REPO}/releases/download/${{ env.TAG }}/${TARBALL}"
+          VERSION_FROM_TAG="${TAG#v}"
 
           FILE="${{ matrix.dir }}/artifacthub-pkg.yml"
-          sed -i "s/^version:.*/version: \"${PKG_VERSION}\"/" "$FILE"
+          sed -i "s/^version:.*/version: \"${VERSION_FROM_TAG}\"/" "$FILE"
           sed -i "s/^createdAt:.*/createdAt: \"${CREATED_AT}\"/" "$FILE"
           sed -i "s|^\\s*headlamp/plugin/archive-url:.*|  headlamp/plugin/archive-url: \"${ARCHIVE_URL}\"|" "$FILE"
           sed -i "s|^\\s*headlamp/plugin/archive-checksum:.*|  headlamp/plugin/archive-checksum: \"${CHECKSUM}\"|" "$FILE"
           echo "pkg_name=$PKG_NAME" >> "$GITHUB_OUTPUT"
-          echo "pkg_version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
 
           if git diff --quiet -- "$FILE"; then
             echo "No changes to commit."
@@ -121,7 +128,7 @@ jobs:
           fi
 
           git add "$FILE"
-          git commit -m "chore(${PKG_NAME}): update artifacthub-pkg.yml for ${PKG_VERSION}"
+          git commit -m "chore(${PKG_NAME}): update artifacthub-pkg.yml for ${VERSION_FROM_TAG}"
 
           # Retry push in case of race with other matrix jobs
           for i in 1 2 3 4 5; do
