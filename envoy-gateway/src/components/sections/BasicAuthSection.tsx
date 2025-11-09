@@ -82,7 +82,7 @@ export default function BasicAuthSection({
     setValidationErrors([]);
     try {
       setLoading(true);
-      await upsertBasicAuthSecret(namespace, formSecretName, formUsername, formPassword);
+      await upsertBasicAuthSecret(namespace, formSecretName, formUsername, formPassword, httpRouteName);
       const spName = `${httpRouteName}-basic-auth`;
       await createSecurityPolicyForHTTPRoute({
         namespace,
@@ -108,6 +108,7 @@ export default function BasicAuthSection({
 
   async function handleEditSave() {
     if (!secretName) return;
+    if (!httpRouteName) return;
     if (!formUsername || !formPassword) {
       setValidationErrors(['ユーザー名と新しいパスワードを入力してください']);
       return;
@@ -115,7 +116,7 @@ export default function BasicAuthSection({
     setValidationErrors([]);
     try {
       setLoading(true);
-      await upsertBasicAuthSecret(namespace, secretName, formUsername, formPassword);
+      await upsertBasicAuthSecret(namespace, secretName, formUsername, formPassword, httpRouteName);
       notifySuccess('Basic認証の資格情報を更新しました');
       setOpenEdit(false);
       setValidationErrors([]);

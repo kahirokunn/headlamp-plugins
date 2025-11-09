@@ -4,14 +4,23 @@ import { ApiProxy } from '@kinvolk/headlamp-plugin/lib';
 export type HTTPRoute = {
   apiVersion?: string;
   kind?: string;
-  metadata: { name: string; namespace?: string; labels?: Record<string, string> };
+  metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
   spec?: { hostnames?: string[] };
+};
+
+type OwnerReference = {
+  apiVersion: string;
+  kind: string;
+  name: string;
+  uid: string;
+  controller?: boolean;
+  blockOwnerDeletion?: boolean;
 };
 
 type SecurityPolicy = {
   apiVersion?: string;
   kind?: string;
-  metadata: { name: string; namespace?: string };
+  metadata: { name: string; namespace?: string; ownerReferences?: OwnerReference[] };
   spec?: {
     targetRefs?: Array<{ group?: string; kind?: string; name?: string }>;
     basicAuth?: { users?: { name?: string } };
@@ -31,7 +40,7 @@ type SecurityPolicy = {
 type BackendTrafficPolicy = {
   apiVersion?: string;
   kind?: string;
-  metadata: { name: string; namespace?: string };
+  metadata: { name: string; namespace?: string; ownerReferences?: OwnerReference[] };
   spec?: {
     targetRefs?: Array<{ group?: string; kind?: string; name?: string }>;
     retry?: {
@@ -83,12 +92,27 @@ async function buildHtpasswdLine(username: string, password: string): Promise<st
   return `${username}:{SHA}${b64}`;
 }
 
+async function buildHttpRouteOwnerRef(
+  namespace: string,
+  httpRouteName: string
+): Promise<OwnerReference | null> {
+  const route = await getHttpRoute(namespace, httpRouteName);
+  if (!route) return null;
+  return {
+    apiVersion: route.apiVersion,
+    kind: route.kind,
+    name: route.metadata.name,
+    uid: route.metadata.uid,
+    blockOwnerDeletion: true,
+  };
+}
+
 export async function getHttpRoute(namespace: string, name: string): Promise<HTTPRoute | null> {
   try {
-    return (await ApiProxy.request(
+    return await ApiProxy.request(
       `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes/${name}`,
       { method: 'GET' }
-    )) as HTTPRoute;
+    );
   } catch {
     return null;
   }
@@ -160,7 +184,8 @@ export async function upsertBasicAuthSecret(
   namespace: string,
   name: string,
   username: string,
-  password: string
+  password: string,
+  ownerHttpRouteName?: string
 ): Promise<void> {
   const line = await buildHtpasswdLine(username, password);
   const fileContent = `${line}\n`;
@@ -170,10 +195,17 @@ export async function upsertBasicAuthSecret(
       : Buffer.from(fileContent, 'utf8').toString('base64');
   const existing = await getSecret(namespace, name);
   if (!existing) {
+    const ownerRef = ownerHttpRouteName
+      ? await buildHttpRouteOwnerRef(namespace, ownerHttpRouteName)
+      : null;
     const body = {
       apiVersion: 'v1',
       kind: 'Secret',
-      metadata: { name, namespace },
+      metadata: {
+        name,
+        namespace,
+        ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+      },
       type: 'Opaque',
       data: { '.htpasswd': dataB64 },
     };
@@ -221,10 +253,15 @@ export async function createSecurityPolicyForHTTPRoute(params: {
   httpRouteName: string;
   secretName: string;
 }): Promise<SecurityPolicy> {
+  const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: SecurityPolicy = {
     apiVersion: 'gateway.envoyproxy.io/v1alpha1',
     kind: 'SecurityPolicy',
-    metadata: { name: params.policyName, namespace: params.namespace },
+    metadata: {
+      name: params.policyName,
+      namespace: params.namespace,
+      ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+    },
     spec: {
       targetRefs: [
         {
@@ -274,7 +311,8 @@ export async function detectBasicAuthConfig(
 export async function upsertOpaqueKeyValueSecret(
   namespace: string,
   name: string,
-  kv: Record<string, string>
+  kv: Record<string, string>,
+  ownerHttpRouteName?: string
 ): Promise<void> {
   const existing = await getSecret(namespace, name);
   const data: Record<string, string> = {};
@@ -283,10 +321,17 @@ export async function upsertOpaqueKeyValueSecret(
     data[k] = b64;
   }
   if (!existing) {
+    const ownerRef = ownerHttpRouteName
+      ? await buildHttpRouteOwnerRef(namespace, ownerHttpRouteName)
+      : null;
     const body = {
       apiVersion: 'v1',
       kind: 'Secret',
-      metadata: { name, namespace },
+      metadata: {
+        name,
+        namespace,
+        ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+      },
       type: 'Opaque',
       data,
     };
@@ -315,10 +360,15 @@ export async function createApiKeySecurityPolicy(params: {
   secretName: string;
   headerName: string;
 }): Promise<SecurityPolicy> {
+  const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: SecurityPolicy = {
     apiVersion: 'gateway.envoyproxy.io/v1alpha1',
     kind: 'SecurityPolicy',
-    metadata: { name: params.policyName, namespace: params.namespace },
+    metadata: {
+      name: params.policyName,
+      namespace: params.namespace,
+      ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+    },
     spec: {
       targetRefs: [
         {
@@ -436,10 +486,15 @@ export async function createRetryBackendTrafficPolicy(params: {
   httpStatusCodes?: number[];
   triggers?: string[];
 }): Promise<BackendTrafficPolicy> {
+  const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: BackendTrafficPolicy = {
     apiVersion: 'gateway.envoyproxy.io/v1alpha1',
     kind: 'BackendTrafficPolicy',
-    metadata: { name: params.policyName, namespace: params.namespace },
+    metadata: {
+      name: params.policyName,
+      namespace: params.namespace,
+      ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+    },
     spec: {
       targetRefs: [
         { group: 'gateway.networking.k8s.io', kind: 'HTTPRoute', name: params.httpRouteName },
@@ -616,10 +671,15 @@ export async function createIpAccessSecurityPolicy(params: {
   allowCidrs: string[];
   denyCidrs: string[];
 }): Promise<SecurityPolicy> {
+  const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: SecurityPolicy = {
     apiVersion: 'gateway.envoyproxy.io/v1alpha1',
     kind: 'SecurityPolicy',
-    metadata: { name: params.policyName, namespace: params.namespace },
+    metadata: {
+      name: params.policyName,
+      namespace: params.namespace,
+      ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+    },
     spec: {
       targetRefs: [
         {

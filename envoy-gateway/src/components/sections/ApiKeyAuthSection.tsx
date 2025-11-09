@@ -142,7 +142,7 @@ export default function ApiKeyAuthSection({
       setLoading(true);
       const kv: Record<string, string> = {};
       for (const c of clients) kv[c.clientId] = c.apiKey;
-      await upsertOpaqueKeyValueSecret(namespace, formSecretName, kv);
+      await upsertOpaqueKeyValueSecret(namespace, formSecretName, kv, httpRouteName);
       const spName = `${httpRouteName}-apikey-auth`;
       await createApiKeySecurityPolicy({
         namespace,
@@ -171,6 +171,7 @@ export default function ApiKeyAuthSection({
 
   async function handleEditSave() {
     if (!policyName || !secretName) return;
+    if (!httpRouteName) return;
     const errMsg = validateClients(clients);
     if (errMsg) {
       setValidationErrors([errMsg]);
@@ -181,7 +182,7 @@ export default function ApiKeyAuthSection({
       setLoading(true);
       const kv: Record<string, string> = {};
       for (const c of clients) kv[c.clientId] = c.apiKey;
-      await upsertOpaqueKeyValueSecret(namespace, secretName, kv);
+      await upsertOpaqueKeyValueSecret(namespace, secretName, kv, httpRouteName);
       await updateApiKeySecurityPolicyExtractFrom({
         namespace,
         policyName,
