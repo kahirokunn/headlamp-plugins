@@ -20,4 +20,8 @@ Go to the Plugin Catalog, search for the Knative plugin, and click the Install b
   Your browser does not support the video tag.
 </video>
 
+<video src="https://github.com/user-attachments/assets/c30486db-4c91-4634-9e2e-a1fba3f3b034" controls width="800">
+  Your browser does not support the video tag.
+</video>
+
 Watch: https://github.com/user-attachments/assets/c30486db-4c91-4634-9e2e-a1fba3f3b034
