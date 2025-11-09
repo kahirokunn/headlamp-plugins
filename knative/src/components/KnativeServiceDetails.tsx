@@ -64,6 +64,17 @@ export default function KnativeServiceDetails({
     }
   }, [namespace, name]);
 
+  const refetchRoutes = React.useCallback(async () => {
+    try {
+      const { external, internal } = await listHttpRoutesByVisibilityForService(namespace, name);
+      setExternalHttpRoutes(external);
+      setInternalHttpRoutes(internal);
+    } catch {
+      setExternalHttpRoutes([]);
+      setInternalHttpRoutes([]);
+    }
+  }, [namespace, name]);
+
   React.useEffect(() => {
     refetchServiceAndRevisions();
   }, [refetchServiceAndRevisions]);
@@ -84,45 +95,14 @@ export default function KnativeServiceDetails({
     };
   }, []);
 
-  // Fetch HTTPRoute list (external/internal)
   React.useEffect(() => {
-    let cancelled = false;
-    setExternalHttpRoutes(null);
-    setInternalHttpRoutes(null);
-    (async () => {
-      try {
-        const { external, internal } = await listHttpRoutesByVisibilityForService(namespace, name);
-        if (!cancelled) {
-          setExternalHttpRoutes(external);
-          setInternalHttpRoutes(internal);
-        }
-      } catch {
-        if (!cancelled) {
-          setExternalHttpRoutes([]);
-          setInternalHttpRoutes([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [namespace, name]);
+    refetchRoutes();
+  }, [refetchRoutes]);
 
   const ready = React.useMemo(
     () => svc?.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True',
     [svc]
   );
-
-  const refetchRoutes = React.useCallback(async () => {
-    try {
-      const { external, internal } = await listHttpRoutesByVisibilityForService(namespace, name);
-      setExternalHttpRoutes(external);
-      setInternalHttpRoutes(internal);
-    } catch {
-      setExternalHttpRoutes([]);
-      setInternalHttpRoutes([]);
-    }
-  }, [namespace, name]);
 
   React.useEffect(() => {
     if (!svc || ready) return;
@@ -132,7 +112,12 @@ export default function KnativeServiceDetails({
     return () => window.clearInterval(timer);
   }, [svc, ready, refetchServiceAndRevisions]);
 
-  // no local traffic state; handled inside TrafficSplittingSection
+  React.useEffect(() => {
+    const timer = window.setInterval(() => {
+      refetchRoutes();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [refetchRoutes]);
 
   async function handleRedeploy() {
     if (!svc) return;
@@ -197,10 +182,7 @@ export default function KnativeServiceDetails({
         name={name}
         service={svc}
         revisions={revs}
-        onSaved={async () => {
-          await refetchServiceAndRevisions();
-          await refetchRoutes();
-        }}
+        onSaved={refetchServiceAndRevisions}
       />
 
       <HttpRoutesSection
