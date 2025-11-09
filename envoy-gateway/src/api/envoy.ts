@@ -500,7 +500,7 @@ export async function detectRetryConfig(
 
 // ---- IP Access Control (SecurityPolicy.authorization) helpers ----
 
-function buildAuthorizationRules(allowCidrs: string[], denyCidrs: string[]) {
+function buildAuthorizationRules(allowCidrs: string[], denyCidrs: string[], forPatch = false) {
   const rules: any[] = [];
   if (allowCidrs?.length) {
     rules.push({
@@ -515,6 +515,11 @@ function buildAuthorizationRules(allowCidrs: string[], denyCidrs: string[]) {
       principal: { clientCIDRs: denyCidrs },
       action: 'Deny',
     });
+  }
+  if (rules.length === 0) {
+    // For PATCH requests, explicitly set to null to remove the key (RFC7396).
+    // For create (POST) bodies, omit the key entirely.
+    return forPatch ? { authorization: null } : {};
   }
   return { authorization: { rules } };
 }
@@ -579,7 +584,7 @@ export async function createIpAccessSecurityPolicy(params: {
   if (existing?.metadata?.name) {
     const patch = {
       spec: {
-        ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || []),
+        ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || [], true),
       },
     };
     await ApiProxy.request(
@@ -612,7 +617,7 @@ export async function createIpAccessSecurityPolicy(params: {
           name: params.httpRouteName,
         },
       ],
-      ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || []),
+      ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || [], false),
     },
   };
   return (await ApiProxy.request(
@@ -633,7 +638,7 @@ export async function updateIpAccessSecurityPolicy(params: {
 }): Promise<void> {
   const patch = {
     spec: {
-      ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || []),
+      ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || [], true),
     },
   };
   await ApiProxy.request(
@@ -642,6 +647,52 @@ export async function updateIpAccessSecurityPolicy(params: {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/merge-patch+json' },
       body: JSON.stringify(patch),
+    }
+  );
+}
+
+// ---- Disable/Delete helpers ----
+
+export async function disableBasicAuthForHTTPRoute(params: {
+  namespace: string;
+  httpRouteName: string;
+}): Promise<void> {
+  const existing = await findSecurityPolicyForHTTPRoute(params.namespace, params.httpRouteName);
+  if (!existing?.metadata?.name) return;
+  const patch = { spec: { basicAuth: null } };
+  await ApiProxy.request(
+    `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+      body: JSON.stringify(patch),
+    }
+  );
+}
+
+export async function disableIpAccessSecurityPolicy(params: {
+  namespace: string;
+  policyName: string;
+}): Promise<void> {
+  const patch = { spec: { authorization: null } };
+  await ApiProxy.request(
+    `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${params.policyName}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+      body: JSON.stringify(patch),
+    }
+  );
+}
+
+export async function deleteRetryBackendTrafficPolicy(params: {
+  namespace: string;
+  policyName: string;
+}): Promise<void> {
+  await ApiProxy.request(
+    `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/backendtrafficpolicies/${params.policyName}`,
+    {
+      method: 'DELETE',
     }
   );
 }

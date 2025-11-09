@@ -20,6 +20,7 @@ import {
   detectBasicAuthConfig,
   upsertBasicAuthSecret,
 } from '../../api/envoy';
+import { disableBasicAuthForHTTPRoute } from '../../api/envoy';
 
 export default function BasicAuthSection({
   namespace,
@@ -33,6 +34,7 @@ export default function BasicAuthSection({
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [httpRouteName, setHttpRouteName] = React.useState<string | null>(null);
+  const [policyName, setPolicyName] = React.useState<string | null>(null);
   const [secretName, setSecretName] = React.useState<string | null>(null);
   const [usernames, setUsernames] = React.useState<string[]>([]);
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
@@ -53,6 +55,7 @@ export default function BasicAuthSection({
     try {
       const result = await detectBasicAuthConfig(namespace, host);
       setHttpRouteName(result.httpRoute?.metadata?.name ?? null);
+      setPolicyName(result.securityPolicy?.metadata?.name ?? null);
       setSecretName(result.secretName);
       setUsernames(result.usernames);
       if (result.secretName) setFormSecretName(result.secretName);
@@ -105,6 +108,30 @@ export default function BasicAuthSection({
         detail
           ? `Failed to enable Basic authentication: ${detail}`
           : 'Failed to enable Basic authentication'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!httpRouteName) return;
+    if (!window.confirm('Disable Basic authentication?')) return;
+    try {
+      setLoading(true);
+      await disableBasicAuthForHTTPRoute({ namespace, httpRouteName });
+      notifySuccess('Basic authentication disabled');
+      setOpenEdit(false);
+      setValidationErrors([]);
+      await refresh();
+      onChanged?.();
+      setFormPassword('');
+    } catch (e) {
+      const detail = (e as Error)?.message?.trim();
+      notifyError(
+        detail
+          ? `Failed to disable Basic authentication: ${detail}`
+          : 'Failed to disable Basic authentication'
       );
     } finally {
       setLoading(false);
@@ -200,17 +227,22 @@ export default function BasicAuthSection({
               Enable Basic Authentication
             </Button>
           ) : (
-            <Button
-              variant="outlined"
-              onClick={() => {
-                setFormUsername(usernames[0] || '');
-                setFormPassword('');
-                setValidationErrors([]);
-                setOpenEdit(true);
-              }}
-            >
-              Edit
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setFormUsername(usernames[0] || '');
+                  setFormPassword('');
+                  setValidationErrors([]);
+                  setOpenEdit(true);
+                }}
+              >
+                Edit
+              </Button>
+              <Button color="error" variant="outlined" onClick={handleDelete}>
+                Delete
+              </Button>
+            </Stack>
           )}
         </Box>
       </Stack>

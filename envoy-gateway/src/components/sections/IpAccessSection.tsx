@@ -21,6 +21,7 @@ import {
   detectIpAccessConfig,
   updateIpAccessSecurityPolicy,
 } from '../../api/envoy';
+import { disableIpAccessSecurityPolicy } from '../../api/envoy';
 
 export default function IpAccessSection({
   namespace,
@@ -231,6 +232,29 @@ export default function IpAccessSection({
     }
   }
 
+  async function handleDelete() {
+    if (!policyName) return;
+    if (!window.confirm('Delete all IP access rules?')) return;
+    try {
+      setLoading(true);
+      await disableIpAccessSecurityPolicy({ namespace, policyName });
+      notifySuccess('IP access control disabled');
+      setOpenEdit(false);
+      setValidationErrors([]);
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      const detail = (e as Error)?.message?.trim();
+      notifyError(
+        detail
+          ? `Failed to disable IP access control: ${detail}`
+          : 'Failed to disable IP access control'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
@@ -292,17 +316,22 @@ export default function IpAccessSection({
               Enable IP Access Control
             </Button>
           ) : (
-            <Button
-              variant="outlined"
-              onClick={() => {
-                setFormAllowCidrs(allowCidrs.length ? allowCidrs : ['']);
-                setFormDenyCidrs(denyCidrs.length ? denyCidrs : ['']);
-                setValidationErrors([]);
-                setOpenEdit(true);
-              }}
-            >
-              Edit
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setFormAllowCidrs(allowCidrs.length ? allowCidrs : ['']);
+                  setFormDenyCidrs(denyCidrs.length ? denyCidrs : ['']);
+                  setValidationErrors([]);
+                  setOpenEdit(true);
+                }}
+              >
+                Edit
+              </Button>
+              <Button color="error" variant="outlined" onClick={handleDelete}>
+                Delete
+              </Button>
+            </Stack>
           )}
         </Box>
       </Stack>

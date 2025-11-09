@@ -20,6 +20,7 @@ import {
   detectRetryConfig,
   updateRetryBackendTrafficPolicy,
 } from '../../api/envoy';
+import { deleteRetryBackendTrafficPolicy } from '../../api/envoy';
 
 export default function RetrySection({
   namespace,
@@ -55,6 +56,25 @@ export default function RetrySection({
       .filter(Boolean)
       .map(s => Number(s))
       .filter(n => Number.isFinite(n));
+  }
+
+  async function handleDelete() {
+    if (!policyName) return;
+    if (!window.confirm('Disable Retry configuration?')) return;
+    try {
+      setLoading(true);
+      await deleteRetryBackendTrafficPolicy({ namespace, policyName });
+      notifySuccess('Retry config disabled');
+      setOpenEdit(false);
+      setValidationErrors([]);
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      const detail = (e as Error)?.message?.trim();
+      notifyError(detail ? `Failed to disable Retry config: ${detail}` : 'Failed to disable Retry config');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function parseStringList(input: string): string[] {
@@ -241,15 +261,20 @@ export default function RetrySection({
               Enable Retry
             </Button>
           ) : (
-            <Button
-              variant="outlined"
-              onClick={() => {
-                setValidationErrors([]);
-                setOpenEdit(true);
-              }}
-            >
-              Edit
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setValidationErrors([]);
+                  setOpenEdit(true);
+                }}
+              >
+                Edit
+              </Button>
+              <Button color="error" variant="outlined" onClick={handleDelete}>
+                Delete
+              </Button>
+            </Stack>
           )}
         </Box>
       </Stack>
