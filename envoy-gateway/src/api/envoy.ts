@@ -253,6 +253,31 @@ export async function createSecurityPolicyForHTTPRoute(params: {
   httpRouteName: string;
   secretName: string;
 }): Promise<SecurityPolicy> {
+  // If an existing SecurityPolicy exists, overwrite basicAuth; otherwise create a new one
+  const existing = await findSecurityPolicyForHTTPRoute(params.namespace, params.httpRouteName);
+  if (existing?.metadata?.name) {
+    const patch = {
+      spec: {
+        basicAuth: {
+          users: {
+            name: params.secretName,
+          },
+        },
+      },
+    };
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+        body: JSON.stringify(patch),
+      }
+    );
+    return (await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      { method: 'GET' }
+    )) as SecurityPolicy;
+  }
   const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: SecurityPolicy = {
     apiVersion: 'gateway.envoyproxy.io/v1alpha1',
@@ -549,6 +574,27 @@ export async function createIpAccessSecurityPolicy(params: {
   allowCidrs: string[];
   denyCidrs: string[];
 }): Promise<SecurityPolicy> {
+  // If an existing SecurityPolicy exists, overwrite authorization; otherwise create a new one
+  const existing = await findSecurityPolicyForHTTPRoute(params.namespace, params.httpRouteName);
+  if (existing?.metadata?.name) {
+    const patch = {
+      spec: {
+        ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || []),
+      },
+    };
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+        body: JSON.stringify(patch),
+      }
+    );
+    return (await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      { method: 'GET' }
+    )) as SecurityPolicy;
+  }
   const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: SecurityPolicy = {
     apiVersion: 'gateway.envoyproxy.io/v1alpha1',

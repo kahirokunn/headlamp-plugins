@@ -33,7 +33,6 @@ export default function BasicAuthSection({
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [httpRouteName, setHttpRouteName] = React.useState<string | null>(null);
-  const [policyName, setPolicyName] = React.useState<string | null>(null);
   const [secretName, setSecretName] = React.useState<string | null>(null);
   const [usernames, setUsernames] = React.useState<string[]>([]);
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
@@ -54,7 +53,6 @@ export default function BasicAuthSection({
     try {
       const result = await detectBasicAuthConfig(namespace, host);
       setHttpRouteName(result.httpRoute?.metadata?.name ?? null);
-      setPolicyName(result.securityPolicy?.metadata?.name ?? null);
       setSecretName(result.secretName);
       setUsernames(result.usernames);
       if (result.secretName) setFormSecretName(result.secretName);
@@ -89,10 +87,9 @@ export default function BasicAuthSection({
         formPassword,
         httpRouteName
       );
-      const spName = `${httpRouteName}-basic-auth`;
       await createSecurityPolicyForHTTPRoute({
         namespace,
-        policyName: spName,
+        policyName: httpRouteName,
         httpRouteName,
         secretName: formSecretName,
       });

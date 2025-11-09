@@ -173,7 +173,7 @@ export default function IpAccessSection({
       setLoading(true);
       const created = await createIpAccessSecurityPolicy({
         namespace,
-        policyName: `${httpRouteName}-ip-access`,
+        policyName: httpRouteName,
         httpRouteName,
         allowCidrs: a,
         denyCidrs: d,

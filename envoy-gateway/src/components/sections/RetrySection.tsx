@@ -112,7 +112,7 @@ export default function RetrySection({
       setLoading(true);
       const policy = await createRetryBackendTrafficPolicy({
         namespace,
-        policyName: `${httpRouteName}-retry`,
+        policyName: httpRouteName,
         httpRouteName,
         numRetries,
         baseInterval,
