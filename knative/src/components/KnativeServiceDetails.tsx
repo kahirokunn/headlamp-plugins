@@ -1,11 +1,18 @@
 import React from 'react';
-import { Box, Button, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/material';
-import type { KnativeRevision, KnativeService, TrafficTarget } from '../types/knative';
-import { getService, listRevisions, redeployService, restartService } from '../api/knative';
+import { Box, CircularProgress, Stack, Typography } from '@mui/material';
+import type { KnativeRevision, KnativeService } from '../types/knative';
+import {
+  fetchAutoscalingGlobalDefaults,
+  getService,
+  listRevisions,
+  redeployService,
+  restartService,
+} from '../api/knative';
 import { listHttpRoutesByVisibilityForService } from '../api/envoy';
 import { useNotify } from './common/notifications/useNotify';
 import { useParams } from 'react-router-dom';
-import ConcurrencyEditor from './ConcurrencyEditor';
+import AutoscalingSettings from './AutoscalingSettings';
+import ScaleBoundsSection from './ScaleBoundsSection';
 import HttpRoutesSection from './HttpRoutesSection';
 import ConditionsSection from './ConditionsSection';
 import ServiceHeader from './ServiceHeader';
@@ -29,6 +36,20 @@ export default function KnativeServiceDetails({
   const { notifySuccess, notifyError, notifyInfo } = useNotify();
   const [externalHttpRoutes, setExternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
   const [internalHttpRoutes, setInternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
+  const [autoDefaults, setAutoDefaults] = React.useState<{
+    concurrencyTarget: number;
+    targetUtilizationPercentage: number;
+    rpsTarget: number;
+    containerConcurrency: number;
+    minScale: number;
+    maxScale: number;
+    maxScaleLimit?: number;
+    initialScale: number;
+    allowZeroInitialScale: boolean;
+    scaleDownDelay: string;
+    stableWindow: string;
+    activationScaleDefault: number;
+  } | null>(null);
 
   const refetch = React.useCallback(async () => {
     try {
@@ -46,6 +67,22 @@ export default function KnativeServiceDetails({
   React.useEffect(() => {
     refetch();
   }, [refetch]);
+
+  // autoscaling defaults 取得
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await fetchAutoscalingGlobalDefaults();
+        if (!cancelled) setAutoDefaults(d);
+      } catch {
+        // ignore; keep null
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // HTTPRoute (external/internal) 一覧を取得
   React.useEffect(() => {
@@ -152,8 +189,6 @@ export default function KnativeServiceDetails({
         onSaved={refetch}
       />
 
-      <ConcurrencyEditor namespace={namespace} name={name} service={svc} onSaved={refetch} />
-
       <HttpRoutesSection
         title="HTTPRoutes (external)"
         namespace={namespace}
@@ -164,6 +199,22 @@ export default function KnativeServiceDetails({
         title="HTTPRoutes (internal)"
         namespace={namespace}
         routes={internalHttpRoutes}
+      />
+
+      <AutoscalingSettings
+        namespace={namespace}
+        name={name}
+        service={svc}
+        defaults={autoDefaults}
+        onSaved={refetch}
+      />
+
+      <ScaleBoundsSection
+        namespace={namespace}
+        name={name}
+        service={svc}
+        defaults={autoDefaults}
+        onSaved={refetch}
       />
     </Stack>
   );
