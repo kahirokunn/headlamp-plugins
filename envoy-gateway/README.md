@@ -1,5 +1,7 @@
 # Envoy Gateway
 
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/headlamp-envoy-gateway)](https://artifacthub.io/packages/search?repo=headlamp-envoy-gateway)
+
 A Headlamp plugin for Envoy Gateway. Provides GUI functionality to list and view HTTPRoute details from Gateway API, and detect/enable/edit Basic authentication, API Key authentication, retry policies (BackendTrafficPolicy), and IP access control (SecurityPolicy).
 
 This plugin adds a new item (Envoy Gateway) to the sidebar and provides GUI functionality to manage Gateway API resources and Envoy Gateway-specific policies.
