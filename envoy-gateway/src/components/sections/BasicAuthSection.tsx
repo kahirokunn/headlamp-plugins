@@ -76,13 +76,19 @@ export default function BasicAuthSection({
   async function handleEnableSave() {
     if (!httpRouteName) return;
     if (!formUsername || !formPassword || !formSecretName) {
-      setValidationErrors(['ユーザー名・パスワード・Secret名を入力してください']);
+      setValidationErrors(['Please enter a username, password, and secret name']);
       return;
     }
     setValidationErrors([]);
     try {
       setLoading(true);
-      await upsertBasicAuthSecret(namespace, formSecretName, formUsername, formPassword, httpRouteName);
+      await upsertBasicAuthSecret(
+        namespace,
+        formSecretName,
+        formUsername,
+        formPassword,
+        httpRouteName
+      );
       const spName = `${httpRouteName}-basic-auth`;
       await createSecurityPolicyForHTTPRoute({
         namespace,
@@ -90,7 +96,7 @@ export default function BasicAuthSection({
         httpRouteName,
         secretName: formSecretName,
       });
-      notifySuccess('Basic認証を有効化しました');
+      notifySuccess('Basic authentication enabled');
       setOpenEnable(false);
       setValidationErrors([]);
       await refresh();
@@ -99,7 +105,9 @@ export default function BasicAuthSection({
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
-        detail ? `Basic認証の有効化に失敗しました: ${detail}` : 'Basic認証の有効化に失敗しました'
+        detail
+          ? `Failed to enable Basic authentication: ${detail}`
+          : 'Failed to enable Basic authentication'
       );
     } finally {
       setLoading(false);
@@ -110,14 +118,14 @@ export default function BasicAuthSection({
     if (!secretName) return;
     if (!httpRouteName) return;
     if (!formUsername || !formPassword) {
-      setValidationErrors(['ユーザー名と新しいパスワードを入力してください']);
+      setValidationErrors(['Please enter a username and new password']);
       return;
     }
     setValidationErrors([]);
     try {
       setLoading(true);
       await upsertBasicAuthSecret(namespace, secretName, formUsername, formPassword, httpRouteName);
-      notifySuccess('Basic認証の資格情報を更新しました');
+      notifySuccess('Basic authentication credentials updated');
       setOpenEdit(false);
       setValidationErrors([]);
       await refresh();
@@ -126,7 +134,9 @@ export default function BasicAuthSection({
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
-        detail ? `Basic認証の更新に失敗しました: ${detail}` : 'Basic認証の更新に失敗しました'
+        detail
+          ? `Failed to update Basic authentication: ${detail}`
+          : 'Failed to update Basic authentication'
       );
     } finally {
       setLoading(false);
@@ -172,7 +182,8 @@ export default function BasicAuthSection({
           </Stack>
           {configured && (
             <Typography variant="body2" color="text.secondary">
-              パスワードはハッシュで保存されているため表示できません。変更は「編集」から行えます。
+              Password is stored as a hash and cannot be displayed for security reasons. Changes can
+              be made from "Edit".
             </Typography>
           )}
         </Stack>
@@ -189,7 +200,7 @@ export default function BasicAuthSection({
                 setOpenEnable(true);
               }}
             >
-              Basic認証を有効化
+              Enable Basic Authentication
             </Button>
           ) : (
             <Button
@@ -201,7 +212,7 @@ export default function BasicAuthSection({
                 setOpenEdit(true);
               }}
             >
-              編集
+              Edit
             </Button>
           )}
         </Box>
@@ -217,27 +228,27 @@ export default function BasicAuthSection({
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Basic認証を有効化</DialogTitle>
+        <DialogTitle>Enable Basic Authentication</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <TextField
-              label="Secret名"
+              label="Secret Name"
               value={formSecretName}
               onChange={e => setFormSecretName(e.target.value)}
               size="small"
               fullWidth
-              helperText="認証情報(.htpasswd)を格納するSecret名"
+              helperText="Secret name to store the authentication information (.htpasswd)"
             />
             <TextField
-              label="ユーザー名"
+              label="Username"
               value={formUsername}
               onChange={e => setFormUsername(e.target.value)}
               size="small"
               fullWidth
             />
             <TextField
-              label="パスワード"
+              label="Password"
               value={formPassword}
               onChange={e => setFormPassword(e.target.value)}
               size="small"
@@ -253,10 +264,10 @@ export default function BasicAuthSection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleEnableSave}>
-            作成
+            Create
           </Button>
         </DialogActions>
       </Dialog>
@@ -271,20 +282,26 @@ export default function BasicAuthSection({
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Basic認証の編集</DialogTitle>
+        <DialogTitle>Edit Basic Authentication</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
-            <TextField label="Secret名" value={secretName || ''} size="small" fullWidth disabled />
             <TextField
-              label="ユーザー名"
+              label="Secret Name"
+              value={secretName || ''}
+              size="small"
+              fullWidth
+              disabled
+            />
+            <TextField
+              label="Username"
               value={formUsername}
               onChange={e => setFormUsername(e.target.value)}
               size="small"
               fullWidth
             />
             <TextField
-              label="新しいパスワード"
+              label="New Password"
               value={formPassword}
               onChange={e => setFormPassword(e.target.value)}
               size="small"
@@ -300,10 +317,10 @@ export default function BasicAuthSection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleEditSave}>
-            保存
+            Save
           </Button>
         </DialogActions>
       </Dialog>

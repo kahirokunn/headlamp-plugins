@@ -66,7 +66,7 @@ export default function IpAccessSection({
   function validateLists(a: string[], d: string[]): string | null {
     for (const v of [...sanitizeList(a), ...sanitizeList(d)]) {
       if (!isValidCIDR(v)) {
-        return `不正なCIDR形式です: ${v}`;
+        return `Invalid CIDR format: ${v}`;
       }
     }
     return null;
@@ -178,7 +178,7 @@ export default function IpAccessSection({
         allowCidrs: a,
         denyCidrs: d,
       });
-      notifySuccess('IPアクセス制御を有効化しました');
+      notifySuccess('IP access control enabled');
       setOpenEnable(false);
       setValidationErrors([]);
       setPolicyName(created.metadata.name);
@@ -188,8 +188,8 @@ export default function IpAccessSection({
       const detail = (e as Error)?.message?.trim();
       notifyError(
         detail
-          ? `IPアクセス制御の有効化に失敗しました: ${detail}`
-          : 'IPアクセス制御の有効化に失敗しました'
+          ? `Failed to enable IP access control: ${detail}`
+          : 'Failed to enable IP access control'
       );
     } finally {
       setLoading(false);
@@ -214,7 +214,7 @@ export default function IpAccessSection({
         allowCidrs: a,
         denyCidrs: d,
       });
-      notifySuccess('IPアクセス制御を更新しました');
+      notifySuccess('IP access control updated');
       setOpenEdit(false);
       setValidationErrors([]);
       await refresh();
@@ -223,8 +223,8 @@ export default function IpAccessSection({
       const detail = (e as Error)?.message?.trim();
       notifyError(
         detail
-          ? `IPアクセス制御の更新に失敗しました: ${detail}`
-          : 'IPアクセス制御の更新に失敗しました'
+          ? `Failed to update IP access control: ${detail}`
+          : 'Failed to update IP access control'
       );
     } finally {
       setLoading(false);
@@ -289,7 +289,7 @@ export default function IpAccessSection({
                 setOpenEnable(true);
               }}
             >
-              IPアクセス制御を有効化
+              Enable IP Access Control
             </Button>
           ) : (
             <Button
@@ -301,7 +301,7 @@ export default function IpAccessSection({
                 setOpenEdit(true);
               }}
             >
-              編集
+              Edit
             </Button>
           )}
         </Box>
@@ -317,7 +317,7 @@ export default function IpAccessSection({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>IPアクセス制御を有効化</DialogTitle>
+        <DialogTitle>Enable IP Access Control</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
@@ -338,7 +338,7 @@ export default function IpAccessSection({
                       }}
                       size="small"
                       sx={{ flex: 1 }}
-                      placeholder="例: 203.0.113.0/24"
+                      placeholder="e.g. 203.0.113.0/24"
                     />
                     <IconButton
                       aria-label="remove"
@@ -351,7 +351,7 @@ export default function IpAccessSection({
                 ))}
                 <Box>
                   <Button onClick={addAllowRow} size="small">
-                    行を追加
+                    Add Row
                   </Button>
                 </Box>
               </Stack>
@@ -373,7 +373,7 @@ export default function IpAccessSection({
                       }}
                       size="small"
                       sx={{ flex: 1 }}
-                      placeholder="例: 198.51.100.0/24"
+                      placeholder="e.g. 198.51.100.0/24"
                     />
                     <IconButton aria-label="remove" onClick={() => removeDenyRow(idx)} size="small">
                       ×
@@ -382,7 +382,7 @@ export default function IpAccessSection({
                 ))}
                 <Box>
                   <Button onClick={addDenyRow} size="small">
-                    行を追加
+                    Add Row
                   </Button>
                 </Box>
               </Stack>
@@ -396,10 +396,10 @@ export default function IpAccessSection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleEnable}>
-            作成
+            Create
           </Button>
         </DialogActions>
       </Dialog>
@@ -414,7 +414,7 @@ export default function IpAccessSection({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>IPアクセス制御の編集</DialogTitle>
+        <DialogTitle>Edit IP Access Control</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
@@ -447,7 +447,7 @@ export default function IpAccessSection({
                 ))}
                 <Box>
                   <Button onClick={addAllowRow} size="small">
-                    行を追加
+                    Add Row
                   </Button>
                 </Box>
               </Stack>
@@ -477,7 +477,7 @@ export default function IpAccessSection({
                 ))}
                 <Box>
                   <Button onClick={addDenyRow} size="small">
-                    行を追加
+                    Add Row
                   </Button>
                 </Box>
               </Stack>
@@ -491,10 +491,10 @@ export default function IpAccessSection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleSave}>
-            保存
+            Save
           </Button>
         </DialogActions>
       </Dialog>

@@ -93,10 +93,10 @@ export default function RetrySection({
 
   function validate(): string | null {
     if (!Number.isFinite(numRetries) || numRetries < 0)
-      return 'numRetries は0以上の数値を入力してください';
-    if (!baseInterval) return 'baseInterval を入力してください (例: 100ms)';
-    if (!maxInterval) return 'maxInterval を入力してください (例: 10s)';
-    if (!timeout) return 'timeout を入力してください (例: 250ms)';
+      return 'Please enter a number greater than or equal to 0 for numRetries';
+    if (!baseInterval) return 'Please enter baseInterval (e.g., 100ms)';
+    if (!maxInterval) return 'Please enter maxInterval (e.g., 10s)';
+    if (!timeout) return 'Please enter timeout (e.g., 250ms)';
     return null;
   }
 
@@ -121,7 +121,7 @@ export default function RetrySection({
         httpStatusCodes: parseNumberList(httpStatusCodes),
         triggers: parseStringList(triggers),
       });
-      notifySuccess('Retry設定を有効化しました');
+      notifySuccess('Retry config enabled');
       setOpenEnable(false);
       setValidationErrors([]);
       setPolicyName(policy.metadata.name);
@@ -130,7 +130,7 @@ export default function RetrySection({
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
-        detail ? `Retry設定の有効化に失敗しました: ${detail}` : 'Retry設定の有効化に失敗しました'
+        detail ? `Failed to enable Retry config: ${detail}` : 'Failed to enable Retry config'
       );
     } finally {
       setLoading(false);
@@ -157,7 +157,7 @@ export default function RetrySection({
         httpStatusCodes: parseNumberList(httpStatusCodes),
         triggers: parseStringList(triggers),
       });
-      notifySuccess('Retry設定を更新しました');
+      notifySuccess('Retry config updated');
       setOpenEdit(false);
       setValidationErrors([]);
       await refresh();
@@ -165,7 +165,7 @@ export default function RetrySection({
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
-        detail ? `Retry設定の更新に失敗しました: ${detail}` : 'Retry設定の更新に失敗しました'
+        detail ? `Failed to update Retry config: ${detail}` : 'Failed to update Retry config'
       );
     } finally {
       setLoading(false);
@@ -238,7 +238,7 @@ export default function RetrySection({
                 setOpenEnable(true);
               }}
             >
-              Retryを有効化
+              Enable Retry
             </Button>
           ) : (
             <Button
@@ -248,7 +248,7 @@ export default function RetrySection({
                 setOpenEdit(true);
               }}
             >
-              編集
+              Edit
             </Button>
           )}
         </Box>
@@ -264,7 +264,7 @@ export default function RetrySection({
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Retryを有効化</DialogTitle>
+        <DialogTitle>Enable Retry</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
@@ -283,7 +283,7 @@ export default function RetrySection({
               onChange={e => setBaseInterval(e.target.value)}
               size="small"
               fullWidth
-              helperText='例: "100ms"'
+              helperText='e.g. "100ms"'
             />
             <TextField
               label="backOff.maxInterval"
@@ -291,7 +291,7 @@ export default function RetrySection({
               onChange={e => setMaxInterval(e.target.value)}
               size="small"
               fullWidth
-              helperText='例: "10s"'
+              helperText='e.g. "10s"'
             />
             <TextField
               label="perRetry.timeout"
@@ -299,22 +299,22 @@ export default function RetrySection({
               onChange={e => setTimeoutVal(e.target.value)}
               size="small"
               fullWidth
-              helperText='例: "250ms"'
+              helperText='e.g. "250ms"'
             />
             <TextField
-              label="retryOn.httpStatusCodes (カンマ区切り)"
+              label="retryOn.httpStatusCodes (comma separated)"
               value={httpStatusCodes}
               onChange={e => setHttpStatusCodes(e.target.value)}
               size="small"
               fullWidth
             />
             <TextField
-              label="retryOn.triggers (カンマ区切り)"
+              label="retryOn.triggers (comma separated)"
               value={triggers}
               onChange={e => setTriggers(e.target.value)}
               size="small"
               fullWidth
-              helperText='例: "connect-failure,retriable-status-codes"'
+              helperText='e.g. "connect-failure,retriable-status-codes"'
             />
           </Stack>
         </DialogContent>
@@ -325,10 +325,10 @@ export default function RetrySection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleEnable}>
-            作成
+            Create
           </Button>
         </DialogActions>
       </Dialog>
@@ -343,7 +343,7 @@ export default function RetrySection({
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Retry設定の編集</DialogTitle>
+        <DialogTitle>Edit Retry</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
@@ -378,14 +378,14 @@ export default function RetrySection({
               fullWidth
             />
             <TextField
-              label="retryOn.httpStatusCodes (カンマ区切り)"
+              label="retryOn.httpStatusCodes (comma separated)"
               value={httpStatusCodes}
               onChange={e => setHttpStatusCodes(e.target.value)}
               size="small"
               fullWidth
             />
             <TextField
-              label="retryOn.triggers (カンマ区切り)"
+              label="retryOn.triggers (comma separated)"
               value={triggers}
               onChange={e => setTriggers(e.target.value)}
               size="small"
@@ -400,10 +400,10 @@ export default function RetrySection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleSave}>
-            保存
+            Save
           </Button>
         </DialogActions>
       </Dialog>

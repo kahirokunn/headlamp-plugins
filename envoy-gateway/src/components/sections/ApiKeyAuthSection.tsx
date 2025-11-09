@@ -118,10 +118,10 @@ export default function ApiKeyAuthSection({
   }
 
   function validateClients(list: ClientEntry[]): string | null {
-    if (!list.length) return '少なくとも1つのクライアントを追加してください';
+    if (!list.length) return 'Please add at least one client';
     for (const c of list) {
-      if (!c.clientId) return 'Client ID は必須です';
-      if (!c.apiKey) return 'API Key は必須です';
+      if (!c.clientId) return 'Client ID is required';
+      if (!c.apiKey) return 'API Key is required';
     }
     return null;
   }
@@ -129,9 +129,9 @@ export default function ApiKeyAuthSection({
   async function handleEnableSave() {
     if (!httpRouteName) return;
     const errMsg = !formSecretName
-      ? 'Secret名を入力してください'
+      ? 'Please enter a secret name'
       : !formHeaderName
-      ? 'ヘッダー名を入力してください'
+      ? 'Please enter a header name'
       : validateClients(clients);
     if (errMsg) {
       setValidationErrors([errMsg]);
@@ -151,7 +151,7 @@ export default function ApiKeyAuthSection({
         secretName: formSecretName,
         headerName: formHeaderName,
       });
-      notifySuccess('API Key認証を有効化しました');
+      notifySuccess('API Key authentication enabled');
       setOpenEnable(false);
       setValidationErrors([]);
       await refresh();
@@ -161,8 +161,8 @@ export default function ApiKeyAuthSection({
       const detail = (e as Error)?.message?.trim();
       notifyError(
         detail
-          ? `API Key認証の有効化に失敗しました: ${detail}`
-          : 'API Key認証の有効化に失敗しました'
+          ? `Failed to enable API Key authentication: ${detail}`
+          : 'Failed to enable API Key authentication'
       );
     } finally {
       setLoading(false);
@@ -188,7 +188,7 @@ export default function ApiKeyAuthSection({
         policyName,
         headerName: formHeaderName || headerName || 'x-api-key',
       });
-      notifySuccess('API Key認証の設定を更新しました');
+      notifySuccess('API Key authentication settings updated');
       setOpenEdit(false);
       setValidationErrors([]);
       await refresh();
@@ -197,7 +197,9 @@ export default function ApiKeyAuthSection({
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
-        detail ? `API Key認証の更新に失敗しました: ${detail}` : 'API Key認証の更新に失敗しました'
+        detail
+          ? `Failed to update API Key authentication: ${detail}`
+          : 'Failed to update API Key authentication'
       );
     } finally {
       setLoading(false);
@@ -249,7 +251,8 @@ export default function ApiKeyAuthSection({
           )}
           {configured && (
             <Typography variant="body2" color="text.secondary">
-              既存のAPIキー値はセキュリティ上表示しません。必要に応じて再設定してください。
+              Existing API key values are not displayed for security reasons. Please reconfigure as
+              needed.
             </Typography>
           )}
         </Stack>
@@ -266,7 +269,7 @@ export default function ApiKeyAuthSection({
                 setOpenEnable(true);
               }}
             >
-              API Key認証を有効化
+              Enable API Key Authentication
             </Button>
           ) : (
             <Button
@@ -279,7 +282,7 @@ export default function ApiKeyAuthSection({
                 setOpenEdit(true);
               }}
             >
-              編集
+              Edit
             </Button>
           )}
         </Box>
@@ -295,27 +298,27 @@ export default function ApiKeyAuthSection({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>API Key認証を有効化</DialogTitle>
+        <DialogTitle>Enable API Key Authentication</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <TextField
-              label="Secret名"
+              label="Secret Name"
               value={formSecretName}
               onChange={e => setFormSecretName(e.target.value)}
               size="small"
               fullWidth
-              helperText="クライアントID→API Keyのマップを格納するSecret名"
+              helperText="Secret name to store the mapping of Client ID to API Key"
             />
             <TextField
-              label="抽出ヘッダー名"
+              label="Extraction Header Name"
               value={formHeaderName}
               onChange={e => setFormHeaderName(e.target.value)}
               size="small"
               fullWidth
-              helperText="例: x-api-key"
+              helperText="e.g. x-api-key"
             />
-            <Typography variant="subtitle2">クライアント一覧</Typography>
+            <Typography variant="subtitle2">Client List</Typography>
             <Stack spacing={1}>
               {clients.map((c, idx) => (
                 <Stack key={idx} direction="row" spacing={1} alignItems="center">
@@ -334,13 +337,13 @@ export default function ApiKeyAuthSection({
                     sx={{ flex: 1 }}
                   />
                   <IconButton aria-label="remove" onClick={() => removeRow(idx)} size="small">
-                    <Typography variant="caption">削除</Typography>
+                    <Typography variant="caption">Delete</Typography>
                   </IconButton>
                 </Stack>
               ))}
               <Box>
                 <Button onClick={addRow} size="small">
-                  行を追加
+                  Add Row
                 </Button>
               </Box>
             </Stack>
@@ -353,10 +356,10 @@ export default function ApiKeyAuthSection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleEnableSave}>
-            作成
+            Create
           </Button>
         </DialogActions>
       </Dialog>
@@ -371,19 +374,25 @@ export default function ApiKeyAuthSection({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>API Key認証の編集</DialogTitle>
+        <DialogTitle>Edit API Key Authentication</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
-            <TextField label="Secret名" value={secretName || ''} size="small" fullWidth disabled />
             <TextField
-              label="抽出ヘッダー名"
+              label="Secret Name"
+              value={secretName || ''}
+              size="small"
+              fullWidth
+              disabled
+            />
+            <TextField
+              label="Extraction Header Name"
               value={formHeaderName}
               onChange={e => setFormHeaderName(e.target.value)}
               size="small"
               fullWidth
             />
-            <Typography variant="subtitle2">クライアント一覧（上書き保存）</Typography>
+            <Typography variant="subtitle2">Client List (Overwrite)</Typography>
             <Stack spacing={1}>
               {clients.map((c, idx) => (
                 <Stack key={idx} direction="row" spacing={1} alignItems="center">
@@ -402,13 +411,13 @@ export default function ApiKeyAuthSection({
                     sx={{ flex: 1 }}
                   />
                   <IconButton aria-label="remove" onClick={() => removeRow(idx)} size="small">
-                    <Typography variant="caption">削除</Typography>
+                    <Typography variant="caption">Delete</Typography>
                   </IconButton>
                 </Stack>
               ))}
               <Box>
                 <Button onClick={addRow} size="small">
-                  行を追加
+                  Add Row
                 </Button>
               </Box>
             </Stack>
@@ -421,10 +430,10 @@ export default function ApiKeyAuthSection({
               setValidationErrors([]);
             }}
           >
-            キャンセル
+            Cancel
           </Button>
           <Button variant="contained" onClick={handleEditSave}>
-            保存
+            Save
           </Button>
         </DialogActions>
       </Dialog>
