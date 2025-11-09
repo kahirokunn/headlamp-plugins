@@ -103,10 +103,6 @@ export async function updateTraffic(
   })) as KnativeService;
 }
 
-export function getServiceURL(svc?: KnativeService | null): string | undefined {
-  return svc?.status?.url;
-}
-
 export function getAge(timestamp?: string): string {
   if (!timestamp) return '';
   const then = new Date(timestamp).getTime();
