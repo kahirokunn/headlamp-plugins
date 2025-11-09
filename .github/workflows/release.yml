@@ -1,4 +1,4 @@
-name: Release Headlamp plugins (matrix)
+name: Release Headlamp plugins
 
 on:
   workflow_dispatch:
