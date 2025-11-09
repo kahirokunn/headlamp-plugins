@@ -113,6 +113,17 @@ export default function KnativeServiceDetails({
     [svc]
   );
 
+  const refetchRoutes = React.useCallback(async () => {
+    try {
+      const { external, internal } = await listHttpRoutesByVisibilityForService(namespace, name);
+      setExternalHttpRoutes(external);
+      setInternalHttpRoutes(internal);
+    } catch {
+      setExternalHttpRoutes([]);
+      setInternalHttpRoutes([]);
+    }
+  }, [namespace, name]);
+
   React.useEffect(() => {
     if (!svc || ready) return;
     const timer = window.setInterval(() => {
@@ -186,7 +197,10 @@ export default function KnativeServiceDetails({
         name={name}
         service={svc}
         revisions={revs}
-        onSaved={refetch}
+        onSaved={async () => {
+          await refetch();
+          await refetchRoutes();
+        }}
       />
 
       <HttpRoutesSection
