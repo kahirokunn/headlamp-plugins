@@ -45,18 +45,15 @@ jobs:
   release:
     name: Release ${{ matrix.plugin }}
     runs-on: ubuntu-latest
-    needs: validate
+    needs:
+      - validate
+      - discover_plugins
     permissions:
       contents: write
       pull-requests: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - plugin: envoy-gateway
-            dir: envoy-gateway
-          - plugin: knative
-            dir: knative
+      matrix: ${{ fromJson(needs.discover_plugins.outputs.matrix) }}
     env:
       TAG: ${{ needs.validate.outputs.tag }}
     steps:
@@ -135,6 +132,7 @@ jobs:
     needs:
       - validate
       - release
+      - discover_plugins
     permissions:
       contents: write
     env:
@@ -169,6 +167,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PLUGIN_DIRS: ${{ needs.discover_plugins.outputs.plugin_dirs }}
         run: |
           set -euo pipefail
           : "${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
@@ -180,7 +179,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          for DIR in "envoy-gateway" "knative"; do
+          if [ -z "${PLUGIN_DIRS:-}" ]; then
+            echo "No plugin directories discovered. Skipping ArtifactHub metadata update."
+            exit 0
+          fi
+
+          for DIR in ${PLUGIN_DIRS}; do
             PKG_NAME=$(node -p "require('./${DIR}/package.json').name")
             TARBALL="${PKG_NAME}-${VERSION_FROM_TAG}.tar.gz"
             SHA_FILE="dist-assets/${TARBALL}.sha256"
@@ -198,14 +202,57 @@ jobs:
             yq -i '.annotations["headlamp/plugin/archive-checksum"] = strenv(CHECKSUM)' "$FILE"
           done
 
-          if git diff --quiet -- "envoy-gateway/artifacthub-pkg.yml" "knative/artifacthub-pkg.yml"; then
+          # Build the list of modified ArtifactHub files dynamically
+          FILES=()
+          for DIR in ${PLUGIN_DIRS}; do
+            FILES+=("${DIR}/artifacthub-pkg.yml")
+          done
+
+          if git diff --quiet -- "${FILES[@]}"; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git add "envoy-gateway/artifacthub-pkg.yml" "knative/artifacthub-pkg.yml"
+          git add "${FILES[@]}"
           git commit -m "chore: update artifacthub-pkg.yml for ${VERSION_FROM_TAG}"
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" "HEAD:${DEFAULT_BRANCH}"
+
+  discover_plugins:
+    name: Discover plugins
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      plugin_dirs: ${{ steps.discover.outputs.plugin_dirs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Discover plugin directories (artifacthub-pkg.yml)
+        id: discover
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const root = process.cwd();
+            const isDir = (p) => {
+              try { return fs.statSync(p).isDirectory(); } catch { return false; }
+            };
+            const hasArtifactHub = (d) => fs.existsSync(path.join(root, d, 'artifacthub-pkg.yml'));
+            const entries = fs.readdirSync(root, { withFileTypes: true });
+            const dirs = entries
+              .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+              .map(e => e.name)
+              .filter(d => hasArtifactHub(d));
+            const include = dirs.map(d => ({ plugin: d, dir: d }));
+            core.setOutput('matrix', JSON.stringify({ include }));
+            core.setOutput('plugin_dirs', dirs.join(' '));
+            core.info(`Discovered plugins: ${dirs.join(', ') || '(none)'}`);
 
   publish_release:
     name: Publish GitHub Release
