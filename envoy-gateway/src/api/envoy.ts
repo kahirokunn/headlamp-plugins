@@ -622,14 +622,14 @@ function buildAuthorizationRules(allowCidrs: string[], denyCidrs: string[]) {
   if (allowCidrs?.length) {
     rules.push({
       name: 'allow-source-ips',
-      match: { sourceIPs: allowCidrs },
+      principal: { clientCIDRs: allowCidrs },
       action: 'Allow',
     });
   }
   if (denyCidrs?.length) {
     rules.push({
       name: 'deny-source-ips',
-      match: { sourceIPs: denyCidrs },
+      principal: { clientCIDRs: denyCidrs },
       action: 'Deny',
     });
   }
@@ -649,17 +649,37 @@ export async function detectIpAccessConfig(
   if (!httpRoute) {
     return { httpRoute: null, securityPolicy: null, allowCidrs: [], denyCidrs: [] };
   }
-  const sp = await findSecurityPolicyForHTTPRoute(namespace, httpRoute.metadata.name);
+  // Prefer a SecurityPolicy that actually has authorization rules for this HTTPRoute
+  let sp: SecurityPolicy | null = null;
+  try {
+    const res = (await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies`,
+      { method: 'GET' }
+    )) as K8sList<SecurityPolicy>;
+    const items = res.items ?? [];
+    sp =
+      items.find(
+        p =>
+          (p.spec?.targetRefs ?? []).some(
+            t =>
+              (t.group ?? '') === 'gateway.networking.k8s.io' &&
+              (t.kind ?? '') === 'HTTPRoute' &&
+              (t.name ?? '') === httpRoute.metadata.name
+          ) && ((p as any)?.spec?.authorization?.rules ?? []).length > 0
+      ) || null;
+  } catch {
+    sp = null;
+  }
   const rules: any[] = (sp as any)?.spec?.authorization?.rules ?? [];
   const allowCidrs =
     rules
       ?.filter(r => String(r?.action) === 'Allow')
-      ?.flatMap(r => r?.match?.sourceIPs || [])
+      ?.flatMap(r => r?.principal?.clientCIDRs || [])
       ?.filter(Boolean) ?? [];
   const denyCidrs =
     rules
       ?.filter(r => String(r?.action) === 'Deny')
-      ?.flatMap(r => r?.match?.sourceIPs || [])
+      ?.flatMap(r => r?.principal?.clientCIDRs || [])
       ?.filter(Boolean) ?? [];
   return { httpRoute, securityPolicy: sp ?? null, allowCidrs, denyCidrs };
 }

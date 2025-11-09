@@ -157,7 +157,7 @@ export default function IpAccessSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namespace, host]);
 
-  const configured = !!(httpRouteName && policyName);
+  const configured = allowCidrs.length > 0 || denyCidrs.length > 0;
 
   async function handleEnable() {
     if (!httpRouteName) return;
