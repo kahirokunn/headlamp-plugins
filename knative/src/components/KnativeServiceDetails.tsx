@@ -51,7 +51,7 @@ export default function KnativeServiceDetails({
     activationScaleDefault: number;
   } | null>(null);
 
-  const refetch = React.useCallback(async () => {
+  const refetchServiceAndRevisions = React.useCallback(async () => {
     try {
       const [s, r] = await Promise.all([
         getService(namespace, name),
@@ -65,8 +65,8 @@ export default function KnativeServiceDetails({
   }, [namespace, name]);
 
   React.useEffect(() => {
-    refetch();
-  }, [refetch]);
+    refetchServiceAndRevisions();
+  }, [refetchServiceAndRevisions]);
 
   // autoscaling defaults 取得
   React.useEffect(() => {
@@ -127,10 +127,10 @@ export default function KnativeServiceDetails({
   React.useEffect(() => {
     if (!svc || ready) return;
     const timer = window.setInterval(() => {
-      refetch();
+      refetchServiceAndRevisions();
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [svc, ready, refetch]);
+  }, [svc, ready, refetchServiceAndRevisions]);
 
   // no local traffic state; handled inside TrafficSplittingSection
 
@@ -140,7 +140,7 @@ export default function KnativeServiceDetails({
     try {
       await redeployService(namespace, name);
       notifyInfo('Redeploy requested');
-      refetch();
+      refetchServiceAndRevisions();
     } catch (err) {
       const detail = (err as Error)?.message?.trim();
       notifyError(detail ? `Redeploy failed: ${detail}` : 'Redeploy failed');
@@ -198,7 +198,7 @@ export default function KnativeServiceDetails({
         service={svc}
         revisions={revs}
         onSaved={async () => {
-          await refetch();
+          await refetchServiceAndRevisions();
           await refetchRoutes();
         }}
       />
@@ -220,7 +220,7 @@ export default function KnativeServiceDetails({
         name={name}
         service={svc}
         defaults={autoDefaults}
-        onSaved={refetch}
+        onSaved={refetchServiceAndRevisions}
       />
 
       <ScaleBoundsSection
@@ -228,7 +228,7 @@ export default function KnativeServiceDetails({
         name={name}
         service={svc}
         defaults={autoDefaults}
-        onSaved={refetch}
+        onSaved={refetchServiceAndRevisions}
       />
     </Stack>
   );
