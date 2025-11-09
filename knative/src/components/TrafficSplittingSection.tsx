@@ -296,7 +296,7 @@ export default function TrafficSplittingSection({
         <Typography variant="subtitle1" gutterBottom>
           Traffic Splitting
         </Typography>
-        <TableContainer>
+        <TableContainer sx={{ maxHeight: 480 }}>
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
@@ -312,7 +312,8 @@ export default function TrafficSplittingSection({
                 const sorted = [...revisions].sort((a, b) => {
                   const at = new Date(a.metadata.creationTimestamp || 0).getTime();
                   const bt = new Date(b.metadata.creationTimestamp || 0).getTime();
-                  return at - bt;
+                  // Newest first
+                  return bt - at;
                 });
                 const latestReadyCondition = latestReadyRevision?.status?.conditions?.find(
                   c => c.type === 'Ready'
@@ -432,7 +433,7 @@ export default function TrafficSplittingSection({
                     </TableRow>
                   );
                 });
-                rows.push(
+                rows.unshift(
                   <TableRow key="latest-revision" hover={Boolean(latestReadyRevisionName)}>
                     <TableCell>
                       <Stack direction="row" spacing={1} alignItems="center">
