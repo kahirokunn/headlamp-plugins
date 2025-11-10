@@ -71,3 +71,27 @@ export interface K8sList<T> {
   kind: string;
   items: T[];
 }
+
+/*
+ * Minimal types for DomainMapping (serving.knative.dev/v1beta1).
+ */
+export interface DomainMapping {
+  apiVersion: 'serving.knative.dev/v1beta1';
+  kind: 'DomainMapping';
+  metadata: ObjectMeta;
+  spec: {
+    ref: {
+      apiVersion?: string;
+      kind: 'Service';
+      name: string;
+      namespace?: string;
+    };
+  };
+  status?: {
+    url?: string;
+    address?: {
+      url?: string;
+    };
+    conditions?: Condition[];
+  };
+}

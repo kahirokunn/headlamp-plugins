@@ -23,7 +23,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { KnativeService } from '../types/knative';
-import { getAge, listServices } from '../api/knative';
+import { getAge, listServices, listDomainMappings } from '../api/knative';
 import KnativeServiceDetails from './KnativeServiceDetails';
 
 function trafficSummary(svc: KnativeService): string {
@@ -45,6 +45,7 @@ export default function KnativeServicesList() {
   const [nsFilter, setNsFilter] = React.useState<string>('all');
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<{ namespace: string; name: string } | null>(null);
+  const [domainByServiceKey, setDomainByServiceKey] = React.useState<Record<string, string[]>>({});
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
@@ -58,9 +59,23 @@ export default function KnativeServicesList() {
 
     const fetchServices = async () => {
       try {
-        const items = await listServices();
+        const [items, dms] = await Promise.all([listServices(), listDomainMappings()]);
+        const domainMap: Record<string, string[]> = {};
+        for (const dm of dms || []) {
+          const refName = dm.spec?.ref?.name;
+          if (!refName) continue;
+          const svcNs = dm.spec?.ref?.namespace || dm.metadata?.namespace || 'default';
+          const key = `${svcNs}/${refName}`;
+          const isReady = dm.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
+          const url = dm.status?.url || dm.status?.address?.url;
+          if (isReady && url) {
+            if (!domainMap[key]) domainMap[key] = [];
+            if (!domainMap[key].includes(url)) domainMap[key].push(url);
+          }
+        }
         if (mounted) {
           setServices(items);
+          setDomainByServiceKey(domainMap);
           setError(null);
         }
       } catch (err) {
@@ -184,7 +199,16 @@ export default function KnativeServicesList() {
                   </TableCell>
                   <TableCell>{ns}</TableCell>
                   <TableCell>
-                    {svc.status?.url ? (
+                    {domainByServiceKey[`${ns}/${name}`] &&
+                    domainByServiceKey[`${ns}/${name}`].length > 0 ? (
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        {domainByServiceKey[`${ns}/${name}`].map(u => (
+                          <a key={u} href={u} target="_blank" rel="noreferrer">
+                            {u}
+                          </a>
+                        ))}
+                      </Stack>
+                    ) : svc.status?.url ? (
                       <Stack direction="row" spacing={1} alignItems="center">
                         <a href={svc.status.url} target="_blank" rel="noreferrer">
                           {svc.status.url}

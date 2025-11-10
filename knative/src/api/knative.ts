@@ -1,7 +1,14 @@
 import { ApiProxy } from '@kinvolk/headlamp-plugin/lib';
-import type { KnativeService, KnativeRevision, K8sList, TrafficTarget } from '../types/knative';
+import type {
+  KnativeService,
+  KnativeRevision,
+  K8sList,
+  TrafficTarget,
+  DomainMapping,
+} from '../types/knative';
 
 const KN_SERVICE_BASE = '/apis/serving.knative.dev/v1';
+const KN_DOMAINMAPPING_BASE = '/apis/serving.knative.dev/v1beta1';
 
 export async function listServices(): Promise<KnativeService[]> {
   const res = (await ApiProxy.request(`${KN_SERVICE_BASE}/services`, {
@@ -25,6 +32,13 @@ export async function listRevisions(
     `${KN_SERVICE_BASE}/namespaces/${namespace}/revisions?labelSelector=${label}`,
     { method: 'GET' }
   )) as K8sList<KnativeRevision>;
+  return res.items ?? [];
+}
+
+export async function listDomainMappings(): Promise<DomainMapping[]> {
+  const res = (await ApiProxy.request(`${KN_DOMAINMAPPING_BASE}/domainmappings`, {
+    method: 'GET',
+  })) as K8sList<DomainMapping>;
   return res.items ?? [];
 }
 
