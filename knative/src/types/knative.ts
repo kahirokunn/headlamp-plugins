@@ -42,6 +42,7 @@ interface KnativeServiceStatus {
   address?: {
     url?: string;
   };
+  latestCreatedRevisionName?: string;
   latestReadyRevisionName?: string;
   conditions?: Condition[];
   traffic?: (TrafficTarget & { url?: string })[];

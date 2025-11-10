@@ -28,12 +28,13 @@ import KnativeServiceDetails from './KnativeServiceDetails';
 
 function trafficSummary(svc: KnativeService): string {
   const tr = svc.spec?.traffic || [];
-  if (!tr.length) return '';
-  return tr
+  // Don't display 0% traffic
+  const nonZero = tr.filter(t => (t.percent ?? 0) > 0);
+  if (!nonZero.length) return '';
+  return nonZero
     .map(t => {
       const target = t.latestRevision ? 'latest' : t.revisionName || 'rev';
-      const tag = t.tag ? ` (${t.tag})` : '';
-      return `${t.percent ?? 0}% ${target}${tag}`;
+      return `${t.percent ?? 0}% ${target}`;
     })
     .join(', ');
 }
@@ -53,16 +54,30 @@ export default function KnativeServicesList() {
 
   React.useEffect(() => {
     let mounted = true;
-    (async () => {
+    let intervalId: number | undefined;
+
+    const fetchServices = async () => {
       try {
         const items = await listServices();
-        if (mounted) setServices(items);
+        if (mounted) {
+          setServices(items);
+          setError(null);
+        }
       } catch (err) {
-        setError((err as Error)?.message || 'Failed to load services');
+        if (mounted) {
+          setError((err as Error)?.message || 'Failed to load services');
+        }
       }
-    })();
+    };
+
+    fetchServices();
+    intervalId = window.setInterval(fetchServices, 10000);
+
     return () => {
       mounted = false;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
     };
   }, []);
 
@@ -116,8 +131,9 @@ export default function KnativeServicesList() {
               <TableCell>Name</TableCell>
               <TableCell>Namespace</TableCell>
               <TableCell>URL</TableCell>
-              <TableCell>Latest Ready Revision</TableCell>
+              <TableCell>Latest Revision</TableCell>
               <TableCell>Traffic</TableCell>
+              <TableCell>Tags</TableCell>
               <TableCell>Age</TableCell>
             </TableRow>
           </TableHead>
@@ -125,6 +141,19 @@ export default function KnativeServicesList() {
             {filtered.map(svc => {
               const ns = svc.metadata.namespace || 'default';
               const name = svc.metadata.name;
+              const isReady =
+                svc.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
+              const latestRevisionFull =
+                svc.status?.latestCreatedRevisionName ?? svc.status?.latestReadyRevisionName ?? '';
+              const latestRevisionShort =
+                latestRevisionFull && latestRevisionFull.startsWith(`${name}-`)
+                  ? latestRevisionFull.slice(name.length + 1)
+                  : latestRevisionFull || '-';
+              const tags = Array.from(
+                new Set(
+                  (svc.spec?.traffic ?? []).map(t => t.tag).filter((v): v is string => Boolean(v))
+                )
+              ).sort();
               return (
                 <TableRow key={`${ns}/${name}`} hover>
                   <TableCell>
@@ -161,11 +190,39 @@ export default function KnativeServicesList() {
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell>{svc.status?.latestReadyRevisionName || '-'}</TableCell>
+                  <TableCell>
+                    {latestRevisionShort !== '-' ? (
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography variant="body2">{latestRevisionShort}</Typography>
+                        {isReady ? (
+                          <Chip label="Ready" color="success" size="small" />
+                        ) : (
+                          <Chip label="Not Ready" color="warning" size="small" />
+                        )}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Typography variant="body2" color="text.secondary">
                       {trafficSummary(svc) || '-'}
                     </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {tags.length ? (
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        {tags.map(tag => (
+                          <Chip key={tag} label={tag} size="small" />
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>{getAge(svc.metadata.creationTimestamp)}</TableCell>
                 </TableRow>
@@ -179,11 +236,7 @@ export default function KnativeServicesList() {
         <DialogTitle>Service Details</DialogTitle>
         <DialogContent dividers>
           {selected && (
-            <KnativeServiceDetails
-              namespace={selected.namespace}
-              name={selected.name}
-              initialTab="overview"
-            />
+            <KnativeServiceDetails namespace={selected.namespace} name={selected.name} />
           )}
         </DialogContent>
         <DialogActions>
