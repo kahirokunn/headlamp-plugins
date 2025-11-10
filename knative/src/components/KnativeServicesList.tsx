@@ -167,6 +167,12 @@ export default function KnativeServicesList() {
                       >
                         {name}
                       </Button>
+                      {svc.metadata?.labels?.['networking.knative.dev/visibility'] ===
+                      'cluster-local' ? (
+                        <Chip label="Internal" color="info" size="small" />
+                      ) : (
+                        <Chip label="External" color="info" size="small" />
+                      )}
                       {svc.status?.conditions?.find(
                         c => c.type === 'Ready' && c.status === 'True'
                       ) ? (
