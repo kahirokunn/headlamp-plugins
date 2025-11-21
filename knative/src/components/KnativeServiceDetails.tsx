@@ -4,23 +4,20 @@ import type { KnativeRevision, KnativeService } from '../types/knative';
 import {
   fetchAutoscalingGlobalDefaults,
   fetchIngressClass,
-  fetchNetworkTemplates,
   getService,
   listRevisions,
   redeployService,
   restartService,
 } from '../api/knative';
-import { listHttpRoutesByVisibilityForService } from '../api/envoy';
 import { useNotify } from './common/notifications/useNotify';
 import { useParams } from 'react-router-dom';
 import AutoscalingSettings from './AutoscalingSettings';
 import ScaleBoundsSection from './ScaleBoundsSection';
-import HttpRoutesSection from './HttpRoutesSection';
 import ConditionsSection from './ConditionsSection';
 import ServiceHeader from './ServiceHeader';
 import TrafficSplittingSection from './TrafficSplittingSection';
-import type { HTTPRoute } from '../api/envoy';
 import DomainMappingSection from './DomainMappingSection';
+import IngressIntegrationsSection from './IngressIntegrationsSection';
 
 export default function KnativeServiceDetails({
   namespace: namespaceProp,
@@ -37,8 +34,6 @@ export default function KnativeServiceDetails({
   const [acting, setActing] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const { notifyError, notifyInfo } = useNotify();
-  const [externalHttpRoutes, setExternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
-  const [internalHttpRoutes, setInternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
   const [autoDefaults, setAutoDefaults] = React.useState<{
     concurrencyTarget: number;
     targetUtilizationPercentage: number;
@@ -52,10 +47,6 @@ export default function KnativeServiceDetails({
     scaleDownDelay: string;
     stableWindow: string;
     activationScaleDefault: number;
-  } | null>(null);
-  const [networkTemplates, setNetworkTemplates] = React.useState<{
-    domainTemplate: string;
-    tagTemplate: string;
   } | null>(null);
   const [ingressClass, setIngressClass] = React.useState<string | null>(null);
   const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
@@ -73,17 +64,6 @@ export default function KnativeServiceDetails({
     }
   }, [namespace, name]);
 
-  const refetchRoutes = React.useCallback(async () => {
-    try {
-      const { external, internal } = await listHttpRoutesByVisibilityForService(namespace, name);
-      setExternalHttpRoutes(external);
-      setInternalHttpRoutes(internal);
-    } catch {
-      setExternalHttpRoutes([]);
-      setInternalHttpRoutes([]);
-    }
-  }, [namespace, name]);
-
   React.useEffect(() => {
     refetchServiceAndRevisions();
   }, [refetchServiceAndRevisions]);
@@ -95,22 +75,6 @@ export default function KnativeServiceDetails({
       try {
         const d = await fetchAutoscalingGlobalDefaults();
         if (!cancelled) setAutoDefaults(d);
-      } catch {
-        // ignore; keep null
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Fetch network templates (domain-template, tag-template)
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const t = await fetchNetworkTemplates();
-        if (!cancelled) setNetworkTemplates(t);
       } catch {
         // ignore; keep null
       }
@@ -142,10 +106,6 @@ export default function KnativeServiceDetails({
     };
   }, []);
 
-  React.useEffect(() => {
-    refetchRoutes();
-  }, [refetchRoutes]);
-
   const ready = React.useMemo(
     () => svc?.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True',
     [svc]
@@ -158,13 +118,6 @@ export default function KnativeServiceDetails({
     }, 4000);
     return () => window.clearInterval(timer);
   }, [svc, ready, refetchServiceAndRevisions]);
-
-  React.useEffect(() => {
-    const timer = window.setInterval(() => {
-      refetchRoutes();
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [refetchRoutes]);
 
   async function handleRedeploy() {
     if (!svc) return;
@@ -212,7 +165,6 @@ export default function KnativeServiceDetails({
   }
 
   const expectedIngressClass = 'gateway-api.ingress.networking.knative.dev';
-  const isGatewayAPIIngress = ingressClassLoaded && ingressClass === expectedIngressClass;
   const shouldShowIngressWarning = ingressClassLoaded && ingressClass !== expectedIngressClass;
 
   function formatIngressClass(): string {
@@ -258,27 +210,14 @@ export default function KnativeServiceDetails({
         onSaved={refetchServiceAndRevisions}
       />
 
-      {isGatewayAPIIngress && (
-        <HttpRoutesSection
-          title="HTTPRoutes (external)"
-          namespace={namespace}
-          routes={externalHttpRoutes}
-          serviceName={name}
-          networkTemplates={networkTemplates ?? undefined}
-        />
-      )}
-
       <DomainMappingSection namespace={namespace} serviceName={name} />
 
-      {isGatewayAPIIngress && (
-        <HttpRoutesSection
-          title="HTTPRoutes (internal)"
-          namespace={namespace}
-          routes={internalHttpRoutes}
-          serviceName={name}
-          networkTemplates={networkTemplates ?? undefined}
-        />
-      )}
+      <IngressIntegrationsSection
+        namespace={namespace}
+        serviceName={name}
+        ingressClass={ingressClass}
+        ingressClassLoaded={ingressClassLoaded}
+      />
 
       <AutoscalingSettings
         namespace={namespace}
