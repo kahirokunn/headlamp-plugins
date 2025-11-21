@@ -5,10 +5,12 @@ import type {
   K8sList,
   TrafficTarget,
   DomainMapping,
+  ClusterDomainClaim,
 } from '../types/knative';
 
 const KN_SERVICE_BASE = '/apis/serving.knative.dev/v1';
 const KN_DOMAINMAPPING_BASE = '/apis/serving.knative.dev/v1beta1';
+const KN_CLUSTERDOMAINCLAIM_BASE = '/apis/networking.internal.knative.dev/v1alpha1';
 
 export async function listServices(): Promise<KnativeService[]> {
   const res = (await ApiProxy.request(`${KN_SERVICE_BASE}/services`, {
@@ -40,6 +42,93 @@ export async function listDomainMappings(): Promise<DomainMapping[]> {
     method: 'GET',
   })) as K8sList<DomainMapping>;
   return res.items ?? [];
+}
+
+export async function createDomainMapping(params: {
+  namespace: string;
+  domain: string;
+  serviceName: string;
+  serviceNamespace?: string;
+}): Promise<DomainMapping> {
+  const { namespace, domain, serviceName, serviceNamespace } = params;
+  const body: DomainMapping = {
+    apiVersion: 'serving.knative.dev/v1beta1',
+    kind: 'DomainMapping',
+    metadata: {
+      name: domain,
+      namespace,
+    },
+    spec: {
+      ref: {
+        apiVersion: 'serving.knative.dev/v1',
+        kind: 'Service',
+        name: serviceName,
+        namespace: serviceNamespace || namespace,
+      },
+    },
+  };
+  return (await ApiProxy.request(
+    `${KN_DOMAINMAPPING_BASE}/namespaces/${namespace}/domainmappings`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  )) as DomainMapping;
+}
+
+export async function createClusterDomainClaim(domain: string, namespace: string): Promise<ClusterDomainClaim> {
+  const body: ClusterDomainClaim = {
+    apiVersion: 'networking.internal.knative.dev/v1alpha1',
+    kind: 'ClusterDomainClaim',
+    metadata: { name: domain },
+    spec: { namespace },
+  };
+  return (await ApiProxy.request(`${KN_CLUSTERDOMAINCLAIM_BASE}/clusterdomainclaims`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })) as ClusterDomainClaim;
+}
+
+export async function getClusterDomainClaim(domain: string): Promise<ClusterDomainClaim | null> {
+  try {
+    const res = (await ApiProxy.request(
+      `${KN_CLUSTERDOMAINCLAIM_BASE}/clusterdomainclaims/${domain}`,
+      { method: 'GET' }
+    )) as ClusterDomainClaim;
+    return res ?? null;
+  } catch (e) {
+    // 404 or permission errors -> treat as not found for UI hinting
+    return null;
+  }
+}
+
+export async function deleteDomainMapping(namespace: string, domain: string): Promise<void> {
+  await ApiProxy.request(
+    `${KN_DOMAINMAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function annotateDomainMapping(
+  namespace: string,
+  domain: string,
+  annotations: Record<string, string | null>
+): Promise<DomainMapping> {
+  const body = {
+    metadata: {
+      annotations,
+    },
+  };
+  return (await ApiProxy.request(
+    `${KN_DOMAINMAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+      body: JSON.stringify(body),
+    }
+  )) as DomainMapping;
 }
 
 export async function redeployService(namespace: string, name: string): Promise<void> {

@@ -19,6 +19,7 @@ import ConditionsSection from './ConditionsSection';
 import ServiceHeader from './ServiceHeader';
 import TrafficSplittingSection from './TrafficSplittingSection';
 import type { HTTPRoute } from '../api/envoy';
+import DomainMappingSection from './DomainMappingSection';
 
 export default function KnativeServiceDetails({
   namespace: namespaceProp,
@@ -213,6 +214,8 @@ export default function KnativeServiceDetails({
         serviceName={name}
         networkTemplates={networkTemplates ?? undefined}
       />
+
+      <DomainMappingSection namespace={namespace} serviceName={name} />
 
       <HttpRoutesSection
         title="HTTPRoutes (internal)"

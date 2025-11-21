@@ -95,3 +95,17 @@ export interface DomainMapping {
     conditions?: Condition[];
   };
 }
+
+/*
+ * Minimal types for ClusterDomainClaim (networking.internal.knative.dev/v1alpha1).
+ * Cluster-scoped resource that reserves a domain for a specific namespace.
+ */
+export interface ClusterDomainClaim {
+  apiVersion: 'networking.internal.knative.dev/v1alpha1';
+  kind: 'ClusterDomainClaim';
+  metadata: ObjectMeta;
+  spec: {
+    namespace: string;
+  };
+  status?: Record<string, unknown>;
+}
