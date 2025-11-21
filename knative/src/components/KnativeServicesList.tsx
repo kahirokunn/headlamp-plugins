@@ -25,6 +25,7 @@ import {
 import type { KnativeService } from '../types/knative';
 import { getAge, listServices, listDomainMappings } from '../api/knative';
 import KnativeServiceDetails from './KnativeServiceDetails';
+import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
 
 function trafficSummary(svc: KnativeService): string {
   const tr = svc.spec?.traffic || [];
@@ -46,6 +47,7 @@ export default function KnativeServicesList() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<{ namespace: string; name: string } | null>(null);
   const [domainByServiceKey, setDomainByServiceKey] = React.useState<Record<string, string[]>>({});
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
@@ -53,48 +55,46 @@ export default function KnativeServicesList() {
     return Array.from(set).sort();
   }, [services]);
 
+  const fetchServices = React.useCallback(async () => {
+    try {
+      const [items, dms] = await Promise.all([listServices(), listDomainMappings()]);
+      const domainMap: Record<string, string[]> = {};
+      for (const dm of dms || []) {
+        const refName = dm.spec?.ref?.name;
+        if (!refName) continue;
+        const svcNs = dm.spec?.ref?.namespace || dm.metadata?.namespace || 'default';
+        const key = `${svcNs}/${refName}`;
+        const isReady = dm.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
+        const url = dm.status?.url || dm.status?.address?.url;
+        if (isReady && url) {
+          if (!domainMap[key]) domainMap[key] = [];
+          if (!domainMap[key].includes(url)) domainMap[key].push(url);
+        }
+      }
+      setServices(items);
+      setDomainByServiceKey(domainMap);
+      setError(null);
+    } catch (err) {
+      setError((err as Error)?.message || 'Failed to load services');
+    }
+  }, []);
+
   React.useEffect(() => {
     let mounted = true;
     let intervalId: number | undefined;
-
-    const fetchServices = async () => {
-      try {
-        const [items, dms] = await Promise.all([listServices(), listDomainMappings()]);
-        const domainMap: Record<string, string[]> = {};
-        for (const dm of dms || []) {
-          const refName = dm.spec?.ref?.name;
-          if (!refName) continue;
-          const svcNs = dm.spec?.ref?.namespace || dm.metadata?.namespace || 'default';
-          const key = `${svcNs}/${refName}`;
-          const isReady = dm.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
-          const url = dm.status?.url || dm.status?.address?.url;
-          if (isReady && url) {
-            if (!domainMap[key]) domainMap[key] = [];
-            if (!domainMap[key].includes(url)) domainMap[key].push(url);
-          }
-        }
-        if (mounted) {
-          setServices(items);
-          setDomainByServiceKey(domainMap);
-          setError(null);
-        }
-      } catch (err) {
-        if (mounted) {
-          setError((err as Error)?.message || 'Failed to load services');
-        }
-      }
+    const wrappedFetch = async () => {
+      if (!mounted) return;
+      await fetchServices();
     };
-
-    fetchServices();
-    intervalId = window.setInterval(fetchServices, 10000);
-
+    wrappedFetch();
+    intervalId = window.setInterval(wrappedFetch, 10000);
     return () => {
       mounted = false;
       if (intervalId) {
         window.clearInterval(intervalId);
       }
     };
-  }, []);
+  }, [fetchServices]);
 
   const filtered = React.useMemo(() => {
     if (!services) return [];
@@ -121,22 +121,27 @@ export default function KnativeServicesList() {
     <Stack spacing={2} p={2}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Typography variant="h5">KServices</Typography>
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel id="ns-filter">Namespace</InputLabel>
-          <Select
-            labelId="ns-filter"
-            label="Namespace"
-            value={nsFilter}
-            onChange={e => setNsFilter(e.target.value)}
-          >
-            <MenuItem value="all">All namespaces</MenuItem>
-            {namespaces.map(ns => (
-              <MenuItem key={ns} value={ns}>
-                {ns}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel id="ns-filter">Namespace</InputLabel>
+            <Select
+              labelId="ns-filter"
+              label="Namespace"
+              value={nsFilter}
+              onChange={e => setNsFilter(e.target.value)}
+            >
+              <MenuItem value="all">All namespaces</MenuItem>
+              {namespaces.map(ns => (
+                <MenuItem key={ns} value={ns}>
+                  {ns}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button variant="contained" onClick={() => setCreateOpen(true)}>
+            Create Service
+          </Button>
+        </Stack>
       </Box>
 
       <TableContainer component={Paper} variant="outlined">
@@ -273,6 +278,12 @@ export default function KnativeServicesList() {
           <Button onClick={() => setDetailOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      <CreateKnativeServiceDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={fetchServices}
+      />
     </Stack>
   );
 }

@@ -25,6 +25,134 @@ export async function getService(namespace: string, name: string): Promise<Knati
   })) as KnativeService;
 }
 
+/**
+ * Create a K8s Secret with provided string data (not base64-encoded).
+ */
+export async function createSecret(params: {
+  namespace: string;
+  name: string;
+  data: Record<string, string>;
+  type?: string;
+}): Promise<unknown> {
+  const { namespace, name, data, type } = params;
+  const body = {
+    apiVersion: 'v1',
+    kind: 'Secret',
+    metadata: { name, namespace },
+    type: type || 'Opaque',
+    stringData: data,
+  };
+  return await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Create a Knative Service with minimal fields.
+ * Optionally set internal visibility and attach envFrom secret and imagePullSecret.
+ */
+export async function createService(params: {
+  namespace: string;
+  name: string;
+  image: string;
+  visibility?: 'external' | 'internal';
+  envSecretName?: string | null;
+  imagePullSecretName?: string | null;
+  port: number;
+  protocol?: 'http1' | 'h2c';
+  minScale: number;
+  cpuRequest?: string | null;
+  cpuLimit?: string | null;
+  memoryRequest?: string | null;
+  memoryLimit?: string | null;
+}): Promise<KnativeService> {
+  const {
+    namespace,
+    name,
+    image,
+    visibility,
+    envSecretName,
+    imagePullSecretName,
+    port,
+    protocol,
+    minScale,
+    cpuRequest,
+    cpuLimit,
+    memoryRequest,
+    memoryLimit,
+  } = params;
+  const metadata: KnativeService['metadata'] = {
+    name,
+    namespace,
+    labels: {},
+  };
+  if (visibility === 'internal') {
+    metadata.labels = {
+      ...metadata.labels,
+      'networking.knative.dev/visibility': 'cluster-local',
+    };
+  }
+
+  const templateMetadata: { annotations?: Record<string, string> } = {};
+  if (protocol) {
+    templateMetadata.annotations = {
+      ...(templateMetadata.annotations || {}),
+      'serving.knative.dev/protocol': protocol,
+    };
+  }
+  templateMetadata.annotations = {
+    ...(templateMetadata.annotations || {}),
+    'autoscaling.knative.dev/min-scale': String(minScale),
+  };
+
+  const templateSpec: Record<string, unknown> = {};
+  if (imagePullSecretName) {
+    (templateSpec as any).imagePullSecrets = [{ name: imagePullSecretName }];
+  }
+
+  const container: Record<string, unknown> = { image };
+  if (envSecretName) {
+    (container as any).envFrom = [{ secretRef: { name: envSecretName } }];
+  }
+  (container as any).ports = [{ containerPort: port }];
+  // resources
+  const resources: { requests?: Record<string, string>; limits?: Record<string, string> } = {};
+  if (cpuRequest || memoryRequest) {
+    resources.requests = {};
+    if (cpuRequest) resources.requests.cpu = cpuRequest;
+    if (memoryRequest) resources.requests.memory = memoryRequest;
+  }
+  if (cpuLimit || memoryLimit) {
+    resources.limits = {};
+    if (cpuLimit) resources.limits.cpu = cpuLimit;
+    if (memoryLimit) resources.limits.memory = memoryLimit;
+  }
+  if (resources.requests || resources.limits) {
+    (container as any).resources = resources;
+  }
+  (templateSpec as any).containers = [container];
+
+  const body: KnativeService = {
+    apiVersion: 'serving.knative.dev/v1',
+    kind: 'Service',
+    metadata,
+    spec: {
+      template: {
+        ...(Object.keys(templateMetadata).length > 0 ? { metadata: templateMetadata } : {}),
+        spec: templateSpec,
+      },
+    },
+  };
+
+  return (await ApiProxy.request(`${KN_SERVICE_BASE}/namespaces/${namespace}/services`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })) as KnativeService;
+}
+
 export async function listRevisions(
   namespace: string,
   serviceName: string
