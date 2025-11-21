@@ -24,7 +24,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { KnativeService } from '../types/knative';
-import { getAge, listServices, listDomainMappings } from '../api/knative';
+import { fetchIngressClass, getAge, listServices, listDomainMappings } from '../api/knative';
 import KnativeServiceDetails from './KnativeServiceDetails';
 import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
 
@@ -53,6 +53,8 @@ export default function KnativeServicesList() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [sortKey, setSortKey] = React.useState<SortKey>('name');
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
+  const [ingressClass, setIngressClass] = React.useState<string | null>(null);
+  const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
@@ -82,6 +84,27 @@ export default function KnativeServicesList() {
     } catch (err) {
       setError((err as Error)?.message || 'Failed to load services');
     }
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const value = await fetchIngressClass();
+        if (!cancelled) {
+          setIngressClass(value);
+          setIngressClassLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setIngressClass(null);
+          setIngressClassLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   React.useEffect(() => {
@@ -181,6 +204,13 @@ export default function KnativeServicesList() {
     );
   }
 
+  function formatIngressClass(): string {
+    if (!ingressClassLoaded) return '';
+    if (!ingressClass) return '(not set)';
+    const suffix = '.ingress.networking.knative.dev';
+    return ingressClass.endsWith(suffix) ? ingressClass.slice(0, -suffix.length) : ingressClass;
+  }
+
   return (
     <Stack spacing={2} p={2}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -207,6 +237,12 @@ export default function KnativeServicesList() {
           </Button>
         </Stack>
       </Box>
+
+      {ingressClassLoaded && (
+        <Typography variant="body2" color="text.secondary">
+          Ingress class: {formatIngressClass()}
+        </Typography>
+      )}
 
       <TableContainer component={Paper} variant="outlined">
         <Table size="small" stickyHeader aria-label="Knative services table">

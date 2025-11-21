@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, CircularProgress, Stack, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import type { KnativeRevision, KnativeService } from '../types/knative';
 import {
   fetchAutoscalingGlobalDefaults,
+  fetchIngressClass,
   fetchNetworkTemplates,
   getService,
   listRevisions,
@@ -56,6 +57,8 @@ export default function KnativeServiceDetails({
     domainTemplate: string;
     tagTemplate: string;
   } | null>(null);
+  const [ingressClass, setIngressClass] = React.useState<string | null>(null);
+  const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
 
   const refetchServiceAndRevisions = React.useCallback(async () => {
     try {
@@ -110,6 +113,28 @@ export default function KnativeServiceDetails({
         if (!cancelled) setNetworkTemplates(t);
       } catch {
         // ignore; keep null
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch ingress.class from config-network to warn when Gateway API integration is not enabled.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const value = await fetchIngressClass();
+        if (!cancelled) {
+          setIngressClass(value);
+          setIngressClassLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setIngressClass(null);
+          setIngressClassLoaded(true);
+        }
       }
     })();
     return () => {
@@ -186,8 +211,29 @@ export default function KnativeServiceDetails({
     );
   }
 
+  const expectedIngressClass = 'gateway-api.ingress.networking.knative.dev';
+  const shouldShowIngressWarning = ingressClassLoaded && ingressClass !== expectedIngressClass;
+
+  function formatIngressClass(): string {
+    if (!ingressClassLoaded) return '';
+    if (!ingressClass) return '(not set)';
+    const suffix = '.ingress.networking.knative.dev';
+    return ingressClass.endsWith(suffix) ? ingressClass.slice(0, -suffix.length) : ingressClass;
+  }
+
   return (
     <Stack spacing={2} p={2}>
+      {shouldShowIngressWarning && (
+        <Alert severity="warning">
+          Gateway API integration may be limited because Knative &quot;config-network&quot;
+          ConfigMap ingress.class
+          {ingressClass == null
+            ? ' is not set.'
+            : ` is set to "${ingressClass}", not "${expectedIngressClass}".`}{' '}
+          Set it to &quot;gateway-api.ingress.networking.knative.dev&quot; to enable all
+          HTTPRoute-related features in this plugin.
+        </Alert>
+      )}
       <ServiceHeader
         serviceName={svc.metadata.name}
         namespace={svc.metadata.namespace}
@@ -196,6 +242,12 @@ export default function KnativeServiceDetails({
         onRedeploy={handleRedeploy}
         onRestart={handleRestart}
       />
+
+      {ingressClassLoaded && (
+        <Typography variant="body2" color="text.secondary">
+          Ingress class: {formatIngressClass()}
+        </Typography>
+      )}
 
       <ConditionsSection title="Conditions" conditions={svc.status?.conditions} />
 

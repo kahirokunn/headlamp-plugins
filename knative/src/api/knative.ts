@@ -525,3 +525,28 @@ export async function fetchNetworkTemplates(): Promise<{
     return { ...DEFAULTS };
   }
 }
+
+/**
+ * Fetch the Knative ingress.class from the config-network ConfigMap.
+ *
+ * Returns the trimmed ingress.class string when it is set; otherwise null.
+ * When the ConfigMap cannot be read (for example, due to RBAC), this also
+ * returns null so that callers do not rely on null vs undefined semantics.
+ */
+export async function fetchIngressClass(): Promise<string | null> {
+  try {
+    const cm = (await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-network`,
+      { method: 'GET' }
+    )) as K8sConfigMap;
+    const raw = cm?.data?.['ingress.class'];
+    if (raw == null) {
+      return null;
+    }
+    const trimmed = raw.trim();
+    return trimmed === '' ? null : trimmed;
+  } catch {
+    // Treat unreadable config as "not configured" from the caller's perspective.
+    return null;
+  }
+}
