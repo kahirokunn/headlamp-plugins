@@ -31,6 +31,22 @@ type OwnerReference = {
   blockOwnerDeletion?: boolean;
 };
 
+type AuthorizationPrincipal = {
+  clientCIDRs?: string[];
+};
+
+type AuthorizationRuleAction = 'Allow' | 'Deny';
+
+type AuthorizationRule = {
+  name?: string;
+  principal?: AuthorizationPrincipal;
+  action?: AuthorizationRuleAction;
+};
+
+type Authorization = {
+  rules?: AuthorizationRule[];
+};
+
 type SecurityPolicy = {
   apiVersion?: string;
   kind?: string;
@@ -50,8 +66,8 @@ type SecurityPolicy = {
         cookies?: string[];
       }>;
     };
-    jwt?: any;
-    authorization?: any;
+    jwt?: unknown;
+    authorization?: Authorization;
   };
 };
 
@@ -80,6 +96,19 @@ type BackendTrafficPolicy = {
       };
     };
   };
+};
+
+type K8sSecret = {
+  apiVersion?: string;
+  kind?: string;
+  metadata?: {
+    name?: string;
+    namespace?: string;
+    uid?: string;
+    labels?: Record<string, string>;
+  };
+  data?: Record<string, string>;
+  type?: string;
 };
 
 type K8sList<T> = { items?: T[] };
@@ -137,11 +166,11 @@ async function buildHttpRouteOwnerRef(
   };
 }
 
-async function getSecret(namespace: string, name: string): Promise<any | null> {
+async function getSecret(namespace: string, name: string): Promise<K8sSecret | null> {
   try {
     return (await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
       method: 'GET',
-    })) as any;
+    })) as K8sSecret;
   } catch {
     return null;
   }
@@ -220,7 +249,7 @@ async function findSecurityPolicyForHTTPRoute(
 }
 
 function buildAuthorizationRules(allowCidrs: string[], denyCidrs: string[], forPatch = false) {
-  const rules: any[] = [];
+  const rules: AuthorizationRule[] = [];
   if (allowCidrs?.length) {
     rules.push({
       name: 'allow-source-ips',
