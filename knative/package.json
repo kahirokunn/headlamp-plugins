@@ -37,5 +37,8 @@
   "devDependencies": {
     "@kinvolk/headlamp-plugin": "^0.12.0",
     "knip": "^5.68.0"
+  },
+  "dependencies": {
+    "zod": "^4.1.12"
   }
 }

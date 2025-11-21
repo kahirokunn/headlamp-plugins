@@ -1,4 +1,4 @@
-import { ApiProxy } from '@kinvolk/headlamp-plugin/lib';
+import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
 
 export type HTTPRoute = {
   apiVersion?: string;

@@ -1,4 +1,6 @@
-import { ApiProxy } from '@kinvolk/headlamp-plugin/lib';
+import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
+import * as yaml from 'js-yaml';
+import * as z from 'zod';
 import type {
   KnativeService,
   KnativeRevision,
@@ -9,8 +11,8 @@ import type {
 } from '../types/knative';
 
 const KN_SERVICE_BASE = '/apis/serving.knative.dev/v1';
-const KN_DOMAINMAPPING_BASE = '/apis/serving.knative.dev/v1beta1';
-const KN_CLUSTERDOMAINCLAIM_BASE = '/apis/networking.internal.knative.dev/v1alpha1';
+const KN_DOMAIN_MAPPING_BASE = '/apis/serving.knative.dev/v1beta1';
+const KN_CLUSTER_DOMAIN_CLAIM_BASE = '/apis/networking.internal.knative.dev/v1alpha1';
 
 export async function listServices(): Promise<KnativeService[]> {
   const res = (await ApiProxy.request(`${KN_SERVICE_BASE}/services`, {
@@ -166,7 +168,7 @@ export async function listRevisions(
 }
 
 export async function listDomainMappings(): Promise<DomainMapping[]> {
-  const res = (await ApiProxy.request(`${KN_DOMAINMAPPING_BASE}/domainmappings`, {
+  const res = (await ApiProxy.request(`${KN_DOMAIN_MAPPING_BASE}/domainmappings`, {
     method: 'GET',
   })) as K8sList<DomainMapping>;
   return res.items ?? [];
@@ -196,7 +198,7 @@ export async function createDomainMapping(params: {
     },
   };
   return (await ApiProxy.request(
-    `${KN_DOMAINMAPPING_BASE}/namespaces/${namespace}/domainmappings`,
+    `${KN_DOMAIN_MAPPING_BASE}/namespaces/${namespace}/domainmappings`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -205,14 +207,17 @@ export async function createDomainMapping(params: {
   )) as DomainMapping;
 }
 
-export async function createClusterDomainClaim(domain: string, namespace: string): Promise<ClusterDomainClaim> {
+export async function createClusterDomainClaim(
+  domain: string,
+  namespace: string
+): Promise<ClusterDomainClaim> {
   const body: ClusterDomainClaim = {
     apiVersion: 'networking.internal.knative.dev/v1alpha1',
     kind: 'ClusterDomainClaim',
     metadata: { name: domain },
     spec: { namespace },
   };
-  return (await ApiProxy.request(`${KN_CLUSTERDOMAINCLAIM_BASE}/clusterdomainclaims`, {
+  return (await ApiProxy.request(`${KN_CLUSTER_DOMAIN_CLAIM_BASE}/clusterdomainclaims`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -222,7 +227,7 @@ export async function createClusterDomainClaim(domain: string, namespace: string
 export async function getClusterDomainClaim(domain: string): Promise<ClusterDomainClaim | null> {
   try {
     const res = (await ApiProxy.request(
-      `${KN_CLUSTERDOMAINCLAIM_BASE}/clusterdomainclaims/${domain}`,
+      `${KN_CLUSTER_DOMAIN_CLAIM_BASE}/clusterdomainclaims/${domain}`,
       { method: 'GET' }
     )) as ClusterDomainClaim;
     return res ?? null;
@@ -234,7 +239,7 @@ export async function getClusterDomainClaim(domain: string): Promise<ClusterDoma
 
 export async function deleteDomainMapping(namespace: string, domain: string): Promise<void> {
   await ApiProxy.request(
-    `${KN_DOMAINMAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
+    `${KN_DOMAIN_MAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
     { method: 'DELETE' }
   );
 }
@@ -250,7 +255,7 @@ export async function annotateDomainMapping(
     },
   };
   return (await ApiProxy.request(
-    `${KN_DOMAINMAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
+    `${KN_DOMAIN_MAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/merge-patch+json' },
@@ -551,17 +556,51 @@ export async function fetchIngressClass(): Promise<string | null> {
   }
 }
 
-type GatewayConfig = {
-  class: string;
-  gateway: string; // format: "namespace/name"
-  service?: string;
-  supportedFeatures?: string[];
-};
+const GatewayConfigSchema = z.object({
+  class: z.string(),
+  gateway: z.string(), // format: "namespace/name"
+  service: z.string().optional(),
+  supportedFeatures: z.array(z.string()).optional(),
+});
+
+type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
 
 type GatewayConfigResult = {
   external: GatewayConfig | null;
   local: GatewayConfig | null;
 };
+
+/**
+ * Parse Gateway configuration from YAML string.
+ *
+ * Expected format: array of gateway configs
+ * - class: xxx
+ *   gateway: namespace/name
+ *   service: ...
+ *
+ * Returns the first gateway configuration if found, otherwise null.
+ */
+function parseGatewayYaml(yamlStr: string | undefined): GatewayConfig | null {
+  if (!yamlStr || !yamlStr.trim()) return null;
+  try {
+    // Parse YAML string using js-yaml library
+    const parsed = yaml.load(yamlStr);
+    if (!parsed) return null;
+
+    // Handle both array and single object cases
+    const firstEntry = Array.isArray(parsed) ? parsed[0] : parsed;
+    if (!firstEntry || typeof firstEntry !== 'object') return null;
+
+    // Validate and parse using Zod schema
+    const result = GatewayConfigSchema.safeParse(firstEntry);
+    if (result.success) {
+      return result.data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Fetch Gateway API configuration from the config-gateway ConfigMap.
@@ -576,52 +615,6 @@ export async function fetchGatewayConfig(): Promise<GatewayConfigResult> {
       { method: 'GET' }
     )) as K8sConfigMap;
     const data = cm?.data ?? {};
-
-    const parseGatewayYaml = (yamlStr: string | undefined): GatewayConfig | null => {
-      if (!yamlStr || !yamlStr.trim()) return null;
-      try {
-        // Simple YAML parsing for the expected structure
-        // Format: "- class: xxx\n  gateway: namespace/name\n  service: ..."
-        // We parse the first entry in the array
-        const lines = yamlStr.trim().split('\n');
-        let classVal = '';
-        let gatewayVal = '';
-        let inFirstEntry = false;
-        for (const line of lines) {
-          const trimmed = line.trim();
-          // Check if we're starting a new array entry
-          if (trimmed === '-' || trimmed.startsWith('- ')) {
-            inFirstEntry = true;
-            // Process the first line after "-"
-            const rest = trimmed.substring(1).trim();
-            if (rest.startsWith('class:')) {
-              classVal = rest.substring(6).trim();
-            } else if (rest.startsWith('gateway:')) {
-              gatewayVal = rest.substring(8).trim();
-            }
-            continue;
-          }
-          // If we're in the first entry, parse its fields
-          if (inFirstEntry) {
-            // If we hit another "-" at the start of a line, we've moved to the next entry
-            if (trimmed.startsWith('-')) {
-              break;
-            }
-            if (trimmed.startsWith('class:')) {
-              classVal = trimmed.substring(6).trim();
-            } else if (trimmed.startsWith('gateway:')) {
-              gatewayVal = trimmed.substring(8).trim();
-            }
-          }
-        }
-        if (classVal && gatewayVal) {
-          return { class: classVal, gateway: gatewayVal };
-        }
-        return null;
-      } catch {
-        return null;
-      }
-    };
 
     const external = parseGatewayYaml(data['external-gateways']);
     const local = parseGatewayYaml(data['local-gateways']);
