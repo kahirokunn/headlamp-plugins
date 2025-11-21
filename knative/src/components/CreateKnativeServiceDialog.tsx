@@ -14,12 +14,19 @@ import {
   TextField,
   Typography,
   InputAdornment,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import { createSecret, createService } from '../api/knative';
+import {
+  createIpAccessSecurityPolicy,
+  createSecurityPolicyForHTTPRoute,
+  upsertBasicAuthSecret,
+  waitForServiceHttpRoute,
+} from '../api/envoy';
 import { useNotify } from './common/notifications/useNotify';
 
 type Props = {
-  open: boolean;
   onClose: () => void;
   onCreated?: () => void;
 };
@@ -43,7 +50,25 @@ const isRequestGreaterThanLimit = (request: string, limit: string): boolean => {
   return req > lim;
 };
 
-export default function CreateKnativeServiceDialog({ open, onClose, onCreated }: Props) {
+const sanitizeList = (list: string[]): string[] => list.map(s => s.trim()).filter(Boolean);
+
+const isValidCIDR = (value: string): boolean => {
+  const ipv4 =
+    /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}\/([0-9]|[12]\d|3[0-2])$/;
+  const ipv6 = /^[0-9a-fA-F:]+\/(12[0-8]|1[01]\d|\d{1,2})$/;
+  return ipv4.test(value) || ipv6.test(value);
+};
+
+const validateCidrs = (allow: string[], deny: string[]): string | null => {
+  for (const v of [...sanitizeList(allow), ...sanitizeList(deny)]) {
+    if (!isValidCIDR(v)) {
+      return `Invalid CIDR format: ${v}`;
+    }
+  }
+  return null;
+};
+
+export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props) {
   const [namespace, setNamespace] = React.useState<string>('');
   const [name, setName] = React.useState<string>('');
   const [image, setImage] = React.useState<string>('');
@@ -59,6 +84,13 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
   const [envRows, setEnvRows] = React.useState<EnvRow[]>([
     { key: '', value: '', id: Math.random().toString(36).slice(2) },
   ]);
+  const [enableBasicAuth, setEnableBasicAuth] = React.useState(false);
+  const [basicAuthSecretName, setBasicAuthSecretName] = React.useState('basic-auth');
+  const [basicAuthUsername, setBasicAuthUsername] = React.useState('');
+  const [basicAuthPassword, setBasicAuthPassword] = React.useState('');
+  const [enableIpAccessControl, setEnableIpAccessControl] = React.useState(false);
+  const [ipAllowCidrs, setIpAllowCidrs] = React.useState<string[]>(['']);
+  const [ipDenyCidrs, setIpDenyCidrs] = React.useState<string[]>(['']);
   const [submitting, setSubmitting] = React.useState(false);
   const { notifyError, notifyInfo } = useNotify();
 
@@ -74,17 +106,6 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
     }
   }, [memoryRequest, memoryLimit]);
 
-  const reset = React.useCallback(() => {
-    setNamespace('');
-    setName('');
-    setImage('');
-    setVisibility('external');
-    setImagePullSecretName('');
-    setPort('8080');
-    setEnvRows([{ key: '', value: '', id: Math.random().toString(36).slice(2) }]);
-    setSubmitting(false);
-  }, []);
-
   const handleAddEnvRow = () => {
     setEnvRows(prev => [...prev, { key: '', value: '', id: Math.random().toString(36).slice(2) }]);
   };
@@ -96,6 +117,68 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
   const handleChangeEnvRow = (id: string, field: 'key' | 'value', value: string) => {
     setEnvRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
   };
+
+  const handleChangeAllowCidr = (index: number, value: string) => {
+    setIpAllowCidrs(prev => prev.map((v, i) => (i === index ? value : v)));
+  };
+
+  const handleAddAllowCidrRow = () => {
+    setIpAllowCidrs(prev => [...prev, '']);
+  };
+
+  const handleRemoveAllowCidr = (index: number) => {
+    setIpAllowCidrs(prev => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  };
+
+  const handleChangeDenyCidr = (index: number, value: string) => {
+    setIpDenyCidrs(prev => prev.map((v, i) => (i === index ? value : v)));
+  };
+
+  const handleAddDenyCidrRow = () => {
+    setIpDenyCidrs(prev => [...prev, '']);
+  };
+
+  const handleRemoveDenyCidr = (index: number) => {
+    setIpDenyCidrs(prev => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  };
+
+  async function configureSecurityForService(serviceNamespace: string, serviceName: string) {
+    if (!enableBasicAuth && !enableIpAccessControl) return;
+
+    const route = await waitForServiceHttpRoute(serviceNamespace, serviceName);
+    if (!route) {
+      throw new Error('Timed out while waiting for HTTPRoute of the new service');
+    }
+    const httpRouteName = route.metadata.name;
+
+    if (enableBasicAuth) {
+      await upsertBasicAuthSecret(
+        serviceNamespace,
+        basicAuthSecretName.trim(),
+        basicAuthUsername.trim(),
+        basicAuthPassword,
+        httpRouteName
+      );
+      await createSecurityPolicyForHTTPRoute({
+        namespace: serviceNamespace,
+        policyName: httpRouteName,
+        httpRouteName,
+        secretName: basicAuthSecretName.trim(),
+      });
+    }
+
+    if (enableIpAccessControl) {
+      const allow = sanitizeList(ipAllowCidrs);
+      const deny = sanitizeList(ipDenyCidrs);
+      await createIpAccessSecurityPolicy({
+        namespace: serviceNamespace,
+        policyName: httpRouteName,
+        httpRouteName,
+        allowCidrs: allow,
+        denyCidrs: deny,
+      });
+    }
+  }
 
   const handleSubmit = async () => {
     if (!namespace || !name || !image || !port) {
@@ -111,6 +194,19 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
     if (!Number.isFinite(minScaleNum) || minScaleNum < 0) {
       notifyError('minScale must be a non-negative number');
       return;
+    }
+    if (visibility === 'external' && enableBasicAuth) {
+      if (!basicAuthSecretName.trim() || !basicAuthUsername.trim() || !basicAuthPassword) {
+        notifyError('Basic Auth: secret name, username, and password are required');
+        return;
+      }
+    }
+    if (visibility === 'external' && enableIpAccessControl) {
+      const err = validateCidrs(ipAllowCidrs, ipDenyCidrs);
+      if (err) {
+        notifyError(err);
+        return;
+      }
     }
     const memReqTrimmed = memoryRequest.trim();
     const memLimTrimmed = memoryLimit.trim();
@@ -144,9 +240,23 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
         memoryLimit: memoryLimitQuantity,
       });
       notifyInfo('KService created');
+
+      if (visibility === 'external' && (enableBasicAuth || enableIpAccessControl)) {
+        try {
+          await configureSecurityForService(namespace, name);
+          notifyInfo('Security settings applied via Envoy Gateway');
+        } catch (e) {
+          const detail = (e as Error)?.message?.trim();
+          notifyError(
+            detail
+              ? `KService created but failed to configure security: ${detail}`
+              : 'KService created but failed to configure security'
+          );
+        }
+      }
+
       onCreated && onCreated();
       onClose();
-      reset();
     } catch (e) {
       notifyError((e as Error)?.message || 'Failed to create KService');
     } finally {
@@ -155,7 +265,7 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Create KService</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
@@ -286,6 +396,127 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
               <MenuItem value="internal">Internal (cluster-local)</MenuItem>
             </Select>
           </FormControl>
+          {visibility === 'external' && (
+            <Box>
+              <Typography variant="subtitle1" gutterBottom>
+                Security (Envoy Gateway)
+              </Typography>
+              <Stack spacing={2}>
+                <Box>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Typography variant="subtitle2">Basic Authentication (optional)</Typography>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={enableBasicAuth}
+                          onChange={e => setEnableBasicAuth(e.target.checked)}
+                        />
+                      }
+                      label={enableBasicAuth ? 'Enabled' : 'Disabled'}
+                    />
+                  </Stack>
+                  {enableBasicAuth && (
+                    <Stack direction="row" spacing={1} mt={1}>
+                      <TextField
+                        label="Secret Name"
+                        size="small"
+                        value={basicAuthSecretName}
+                        onChange={e => setBasicAuthSecretName(e.target.value)}
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        label="Username"
+                        size="small"
+                        value={basicAuthUsername}
+                        onChange={e => setBasicAuthUsername(e.target.value)}
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        label="Password"
+                        type="password"
+                        size="small"
+                        value={basicAuthPassword}
+                        onChange={e => setBasicAuthPassword(e.target.value)}
+                        sx={{ flex: 1 }}
+                      />
+                    </Stack>
+                  )}
+                </Box>
+
+                <Box>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Typography variant="subtitle2">IP Access Control (optional)</Typography>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={enableIpAccessControl}
+                          onChange={e => setEnableIpAccessControl(e.target.checked)}
+                        />
+                      }
+                      label={enableIpAccessControl ? 'Enabled' : 'Disabled'}
+                    />
+                  </Stack>
+                  {enableIpAccessControl && (
+                    <Stack spacing={1} mt={1}>
+                      <Typography variant="body2" color="text.secondary">
+                        CIDR形式で入力してください (例: 203.0.113.0/24)。空行は無視されます。
+                      </Typography>
+                      <Stack spacing={1}>
+                        <Typography variant="subtitle2">Allow CIDRs</Typography>
+                        {ipAllowCidrs.map((v, idx) => (
+                          <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                            <TextField
+                              label="CIDR"
+                              size="small"
+                              value={v}
+                              onChange={e => handleChangeAllowCidr(idx, e.target.value)}
+                              sx={{ flex: 1 }}
+                            />
+                            <Button
+                              size="small"
+                              onClick={() => handleRemoveAllowCidr(idx)}
+                              disabled={ipAllowCidrs.length === 1}
+                            >
+                              Delete
+                            </Button>
+                          </Stack>
+                        ))}
+                        <Button size="small" onClick={handleAddAllowCidrRow}>
+                          Add Row
+                        </Button>
+                      </Stack>
+                      <Stack spacing={1}>
+                        <Typography variant="subtitle2">Deny CIDRs</Typography>
+                        {ipDenyCidrs.map((v, idx) => (
+                          <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                            <TextField
+                              label="CIDR"
+                              size="small"
+                              value={v}
+                              onChange={e => handleChangeDenyCidr(idx, e.target.value)}
+                              sx={{ flex: 1 }}
+                            />
+                            <Button
+                              size="small"
+                              onClick={() => handleRemoveDenyCidr(idx)}
+                              disabled={ipDenyCidrs.length === 1}
+                            >
+                              Delete
+                            </Button>
+                          </Stack>
+                        ))}
+                        <Button size="small" onClick={handleAddDenyCidrRow}>
+                          Add Row
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  )}
+                </Box>
+              </Stack>
+            </Box>
+          )}
           <TextField
             label="Container Image"
             placeholder="ghcr.io/knative/helloworld-go:latest"
@@ -300,7 +531,9 @@ export default function CreateKnativeServiceDialog({ open, onClose, onCreated }:
             size="small"
             value={imagePullSecretName}
             onChange={e => setImagePullSecretName(e.target.value)}
-            placeholder={'{"auths":{"your.private.registry.example.com":{"username":"janedoe","password":"xxxxxxxxxxx","email":"jdoe@example.com","auth":"c3R...zE2"}}}'}
+            placeholder={
+              '{"auths":{"your.private.registry.example.com":{"username":"janedoe","password":"xxxxxxxxxxx","email":"knative@example.com","auth":"c3R...zE2"}}}'
+            }
             fullWidth
           />
           <Box>

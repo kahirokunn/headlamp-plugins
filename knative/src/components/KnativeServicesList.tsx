@@ -279,11 +279,12 @@ export default function KnativeServicesList() {
         </DialogActions>
       </Dialog>
 
-      <CreateKnativeServiceDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={fetchServices}
-      />
+      {createOpen && (
+        <CreateKnativeServiceDialog
+          onClose={() => setCreateOpen(false)}
+          onCreated={fetchServices}
+        />
+      )}
     </Stack>
   );
 }
