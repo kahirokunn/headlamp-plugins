@@ -212,6 +212,7 @@ export default function KnativeServiceDetails({
   }
 
   const expectedIngressClass = 'gateway-api.ingress.networking.knative.dev';
+  const isGatewayAPIIngress = ingressClassLoaded && ingressClass === expectedIngressClass;
   const shouldShowIngressWarning = ingressClassLoaded && ingressClass !== expectedIngressClass;
 
   function formatIngressClass(): string {
@@ -224,14 +225,12 @@ export default function KnativeServiceDetails({
   return (
     <Stack spacing={2} p={2}>
       {shouldShowIngressWarning && (
-        <Alert severity="warning">
-          Gateway API integration may be limited because Knative &quot;config-network&quot;
-          ConfigMap ingress.class
+        <Alert severity="warning" variant="filled">
+          Gateway API integration may be limited because Knative "config-network" ConfigMap
+          ingress.class
           {ingressClass == null
             ? ' is not set.'
-            : ` is set to "${ingressClass}", not "${expectedIngressClass}".`}{' '}
-          Set it to &quot;gateway-api.ingress.networking.knative.dev&quot; to enable all
-          HTTPRoute-related features in this plugin.
+            : ` is set to "${ingressClass}", not "${expectedIngressClass}".`}
         </Alert>
       )}
       <ServiceHeader
@@ -259,23 +258,27 @@ export default function KnativeServiceDetails({
         onSaved={refetchServiceAndRevisions}
       />
 
-      <HttpRoutesSection
-        title="HTTPRoutes (external)"
-        namespace={namespace}
-        routes={externalHttpRoutes}
-        serviceName={name}
-        networkTemplates={networkTemplates ?? undefined}
-      />
+      {isGatewayAPIIngress && (
+        <HttpRoutesSection
+          title="HTTPRoutes (external)"
+          namespace={namespace}
+          routes={externalHttpRoutes}
+          serviceName={name}
+          networkTemplates={networkTemplates ?? undefined}
+        />
+      )}
 
       <DomainMappingSection namespace={namespace} serviceName={name} />
 
-      <HttpRoutesSection
-        title="HTTPRoutes (internal)"
-        namespace={namespace}
-        routes={internalHttpRoutes}
-        serviceName={name}
-        networkTemplates={networkTemplates ?? undefined}
-      />
+      {isGatewayAPIIngress && (
+        <HttpRoutesSection
+          title="HTTPRoutes (internal)"
+          namespace={namespace}
+          routes={internalHttpRoutes}
+          serviceName={name}
+          networkTemplates={networkTemplates ?? undefined}
+        />
+      )}
 
       <AutoscalingSettings
         namespace={namespace}
