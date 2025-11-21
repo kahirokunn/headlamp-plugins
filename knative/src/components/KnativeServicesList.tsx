@@ -20,12 +20,15 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   Typography,
 } from '@mui/material';
 import type { KnativeService } from '../types/knative';
 import { getAge, listServices, listDomainMappings } from '../api/knative';
 import KnativeServiceDetails from './KnativeServiceDetails';
 import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
+
+type SortKey = 'name' | 'namespace' | 'url' | 'latestRevision' | 'traffic' | 'tags' | 'age';
 
 function trafficSummary(svc: KnativeService): string {
   const tr = svc.spec?.traffic || [];
@@ -48,6 +51,8 @@ export default function KnativeServicesList() {
   const [selected, setSelected] = React.useState<{ namespace: string; name: string } | null>(null);
   const [domainByServiceKey, setDomainByServiceKey] = React.useState<Record<string, string[]>>({});
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [sortKey, setSortKey] = React.useState<SortKey>('name');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
@@ -101,6 +106,65 @@ export default function KnativeServicesList() {
     return services.filter(s => nsFilter === 'all' || s.metadata.namespace === nsFilter);
   }, [services, nsFilter]);
 
+  function getSortValue(svc: KnativeService, key: SortKey): string {
+    const ns = svc.metadata.namespace || 'default';
+    const name = svc.metadata.name;
+    const serviceKey = `${ns}/${name}`;
+    switch (key) {
+      case 'name':
+        return name.toLowerCase();
+      case 'namespace':
+        return ns.toLowerCase();
+      case 'url': {
+        const urls = domainByServiceKey[serviceKey];
+        const primaryUrl = (urls && urls[0]) || svc.status?.url || '';
+        return primaryUrl.toLowerCase();
+      }
+      case 'latestRevision': {
+        const latestRevisionFull =
+          svc.status?.latestCreatedRevisionName ?? svc.status?.latestReadyRevisionName ?? '';
+        const latestRevisionShort =
+          latestRevisionFull && latestRevisionFull.startsWith(`${name}-`)
+            ? latestRevisionFull.slice(name.length + 1)
+            : latestRevisionFull || '';
+        return latestRevisionShort.toLowerCase();
+      }
+      case 'traffic':
+        return trafficSummary(svc).toLowerCase();
+      case 'tags': {
+        const tags = Array.from(
+          new Set((svc.spec?.traffic ?? []).map(t => t.tag).filter((v): v is string => Boolean(v)))
+        ).sort();
+        return tags.join(',').toLowerCase();
+      }
+      case 'age':
+        return svc.metadata.creationTimestamp || '';
+      default:
+        return '';
+    }
+  }
+
+  function handleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(nextKey);
+      setSortDir('asc');
+    }
+  }
+
+  const sorted = React.useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const av = getSortValue(a, sortKey);
+      const bv = getSortValue(b, sortKey);
+      if (av === bv) return 0;
+      const cmp = av < bv ? -1 : 1;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sortKey, sortDir, domainByServiceKey]);
+
   if (error) {
     return (
       <Box p={2}>
@@ -148,17 +212,73 @@ export default function KnativeServicesList() {
         <Table size="small" stickyHeader aria-label="Knative services table">
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Namespace</TableCell>
-              <TableCell>URL</TableCell>
-              <TableCell>Latest Revision</TableCell>
-              <TableCell>Traffic</TableCell>
-              <TableCell>Tags</TableCell>
-              <TableCell>Age</TableCell>
+              <TableCell sortDirection={sortKey === 'name' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'name'}
+                  direction={sortKey === 'name' ? sortDir : 'asc'}
+                  onClick={() => handleSort('name')}
+                >
+                  Name
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sortDirection={sortKey === 'namespace' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'namespace'}
+                  direction={sortKey === 'namespace' ? sortDir : 'asc'}
+                  onClick={() => handleSort('namespace')}
+                >
+                  Namespace
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sortDirection={sortKey === 'url' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'url'}
+                  direction={sortKey === 'url' ? sortDir : 'asc'}
+                  onClick={() => handleSort('url')}
+                >
+                  URL
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sortDirection={sortKey === 'latestRevision' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'latestRevision'}
+                  direction={sortKey === 'latestRevision' ? sortDir : 'asc'}
+                  onClick={() => handleSort('latestRevision')}
+                >
+                  Latest Revision
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sortDirection={sortKey === 'traffic' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'traffic'}
+                  direction={sortKey === 'traffic' ? sortDir : 'asc'}
+                  onClick={() => handleSort('traffic')}
+                >
+                  Traffic
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sortDirection={sortKey === 'tags' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'tags'}
+                  direction={sortKey === 'tags' ? sortDir : 'asc'}
+                  onClick={() => handleSort('tags')}
+                >
+                  Tags
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sortDirection={sortKey === 'age' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'age'}
+                  direction={sortKey === 'age' ? sortDir : 'asc'}
+                  onClick={() => handleSort('age')}
+                >
+                  Age
+                </TableSortLabel>
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filtered.map(svc => {
+            {sorted.map(svc => {
               const ns = svc.metadata.namespace || 'default';
               const name = svc.metadata.name;
               const isReady =

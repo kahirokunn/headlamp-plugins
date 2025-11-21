@@ -11,6 +11,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
   MenuItem,
@@ -22,6 +23,7 @@ import { Link as HeadlampLink } from '@kinvolk/headlamp-plugin/lib/CommonCompone
 import { HTTPRoute, listAllHttpRoutes } from '../api/envoy';
 
 type VisibilityFilter = 'all' | 'external' | 'internal';
+type SortKey = 'name' | 'namespace' | 'hosts' | 'backends' | 'visibility';
 
 export default function HttpRoutesList() {
   const [routes, setRoutes] = React.useState<HTTPRoute[] | null>(null);
@@ -30,6 +32,8 @@ export default function HttpRoutesList() {
   const [search, setSearch] = React.useState('');
   const [visibility, setVisibility] = React.useState<VisibilityFilter>('all');
   const [namespaceFilter, setNamespaceFilter] = React.useState<string>('all');
+  const [sortKey, setSortKey] = React.useState<SortKey>('name');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -54,6 +58,52 @@ export default function HttpRoutesList() {
     if (v === 'cluster-local') return 'internal';
     return '-';
     // Non-Knative HTTPRoutes may not have a visibility label
+  }
+
+  function getHostsString(r: HTTPRoute): string {
+    return (r.spec?.hostnames ?? []).join(', ');
+  }
+
+  function getBackendsSummary(r: HTTPRoute): string {
+    const backendRefs = r.spec?.rules?.flatMap(rule => rule.backendRefs ?? []) ?? [];
+    if (!backendRefs.length) return '';
+    return (
+      backendRefs
+        .map(br => {
+          const name = br.name ?? '';
+          if (!name) return null;
+          const ns = br.namespace || r.metadata.namespace || '';
+          return ns ? `${name} (${ns})` : name;
+        })
+        .filter(Boolean)
+        .join(', ') || ''
+    );
+  }
+
+  function getSortValue(r: HTTPRoute, key: SortKey): string {
+    switch (key) {
+      case 'name':
+        return (r.metadata?.name || '').toLowerCase();
+      case 'namespace':
+        return (r.metadata?.namespace || '').toLowerCase();
+      case 'hosts':
+        return getHostsString(r).toLowerCase();
+      case 'backends':
+        return getBackendsSummary(r).toLowerCase();
+      case 'visibility':
+        return getVisibilityLabel(r);
+      default:
+        return '';
+    }
+  }
+
+  function handleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(nextKey);
+      setSortDir('asc');
+    }
   }
 
   const namespaces = React.useMemo(() => {
@@ -81,6 +131,18 @@ export default function HttpRoutesList() {
       return name.includes(s) || ns.includes(s) || hosts.includes(s);
     });
   }, [routes, search, visibility, namespaceFilter]);
+
+  const sorted = React.useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const av = getSortValue(a, sortKey);
+      const bv = getSortValue(b, sortKey);
+      if (av === bv) return 0;
+      const cmp = av < bv ? -1 : 1;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sortKey, sortDir]);
 
   if (loading) {
     return (
@@ -147,30 +209,57 @@ export default function HttpRoutesList() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Namespace</TableCell>
-                <TableCell>Hosts</TableCell>
-                <TableCell>Backends</TableCell>
-                <TableCell>Visibility</TableCell>
+                <TableCell sortDirection={sortKey === 'name' ? sortDir : false}>
+                  <TableSortLabel
+                    active={sortKey === 'name'}
+                    direction={sortKey === 'name' ? sortDir : 'asc'}
+                    onClick={() => handleSort('name')}
+                  >
+                    Name
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'namespace' ? sortDir : false}>
+                  <TableSortLabel
+                    active={sortKey === 'namespace'}
+                    direction={sortKey === 'namespace' ? sortDir : 'asc'}
+                    onClick={() => handleSort('namespace')}
+                  >
+                    Namespace
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'hosts' ? sortDir : false}>
+                  <TableSortLabel
+                    active={sortKey === 'hosts'}
+                    direction={sortKey === 'hosts' ? sortDir : 'asc'}
+                    onClick={() => handleSort('hosts')}
+                  >
+                    Hosts
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'backends' ? sortDir : false}>
+                  <TableSortLabel
+                    active={sortKey === 'backends'}
+                    direction={sortKey === 'backends' ? sortDir : 'asc'}
+                    onClick={() => handleSort('backends')}
+                  >
+                    Backends
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'visibility' ? sortDir : false}>
+                  <TableSortLabel
+                    active={sortKey === 'visibility'}
+                    direction={sortKey === 'visibility' ? sortDir : 'asc'}
+                    onClick={() => handleSort('visibility')}
+                  >
+                    Visibility
+                  </TableSortLabel>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filtered.map(r => {
+              {sorted.map(r => {
                 const vis = getVisibilityLabel(r);
-                const backendRefs =
-                  r.spec?.rules?.flatMap(rule => rule.backendRefs ?? []) ?? [];
-                const backendSummary =
-                  backendRefs.length > 0
-                    ? backendRefs
-                        .map(br => {
-                          const name = br.name ?? '';
-                          if (!name) return null;
-                          const ns = br.namespace || r.metadata.namespace || '';
-                          return ns ? `${name} (${ns})` : name;
-                        })
-                        .filter(Boolean)
-                        .join(', ')
-                    : '-';
+                const backendSummary = getBackendsSummary(r);
                 return (
                   <TableRow key={`${r.metadata.namespace}/${r.metadata.name}`} hover>
                     <TableCell>
