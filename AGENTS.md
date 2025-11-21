@@ -59,6 +59,93 @@ type UserData = {
 type Data = any;
 ```
 
+- **API response validation**
+  - Use **`zod/mini`** for validating all API responses from `ApiProxy.request()`.
+  - **All `ApiProxy.request()` responses MUST be validated through a Zod schema** before use.
+  - **All API response type definitions MUST be derived from Zod schemas** using `z.infer<typeof SchemaName>`.
+  - Do not use type assertions (`as`) directly on `ApiProxy.request()` responses; instead, parse and validate them with Zod schemas first.
+  - **Schema design principle**: Define schemas based on the **actual structure of data returned from the API**, not necessarily the CRD definition. For example, even if a CRD defines `spec` as optional (for PATCH operations), if the API always returns it (due to mutating webhooks, defaults, etc.), make it required in the schema.
+  - **Important**: `zod/mini` keeps only a small set of methods (for example `.parse()` and `.check()`) and moves most validation helpers (like `.min()`, `.max()`, `.trim()`, etc.) to top‑level functions. In this repository, **prefer the functional API over method chaining**:
+    - For optional / nullable, prefer `z.nullable(z.optional(z.string()))` (Zod Mini style) instead of the regular-Zod style `z.string().optional().nullable()`.
+    - For checks like `min` / `max`, prefer `.check()` with functional checks, e.g. `z.string().check(z.minLength(5), z.maxLength(10))` instead of `z.string().min(5).max(10)`.
+  - Example:
+
+```ts
+import * as z from 'zod/mini';
+import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
+
+// Define schema based on actual API response structure
+// (note: zod/mini does not support method chaining)
+const ServiceSchema = z.object({
+  apiVersion: z.string(),
+  kind: z.string(),
+  metadata: z.object({
+    name: z.string(),
+    namespace: z.optional(z.string()),
+  }),
+  // spec is required here because the API always returns it
+  // (mutating webhooks, defaults, etc. ensure it exists)
+  spec: z.object({
+    template: z.object({ /* ... */ }),
+    // ... other spec fields
+  }),
+});
+
+// Derive type from schema
+type Service = z.infer<typeof ServiceSchema>;
+
+// Validate response
+export async function getService(namespace: string, name: string): Promise<Service> {
+  const response = await ApiProxy.request(`/api/v1/namespaces/${namespace}/services/${name}`, {
+    method: 'GET',
+  });
+  return ServiceSchema.parse(response);
+}
+```
+
+- **Form implementation**
+  - **All forms MUST be implemented using `react-hook-form` with `zod/mini` for validation.**
+  - Use `@hookform/resolvers/zod` to integrate `zod/mini` schemas with `react-hook-form`.
+  - Define form validation schemas using `zod/mini` (following the same functional composition patterns as API response validation).
+  - Derive form data types from Zod schemas using `z.infer<typeof SchemaName>`.
+  - Use `useForm` hook with `resolver: zodResolver(schema)` for form validation.
+  - Example:
+
+```ts
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod/mini';
+
+// Define form schema
+const CreateServiceSchema = z.object({
+  name: z.string().check(z.minLength(1), 'Name is required'),
+  namespace: z.string().check(z.minLength(1), 'Namespace is required'),
+  replicas: z.optional(z.number().check(z.min(1), 'Replicas must be at least 1')),
+});
+
+type CreateServiceFormData = z.infer<typeof CreateServiceSchema>;
+
+function CreateServiceForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<CreateServiceFormData>({
+    resolver: zodResolver(CreateServiceSchema),
+  });
+
+  const onSubmit = (data: CreateServiceFormData) => {
+    // Handle form submission
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      {/* Form fields */}
+    </form>
+  );
+}
+```
+
 - **Behavior**
   - Avoid breaking changes to existing public APIs unless explicitly intended.
   - Be careful with UX: Headlamp is a desktop app; avoid blocking UI and long, synchronous operations on the main thread.
