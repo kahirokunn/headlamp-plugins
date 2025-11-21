@@ -437,7 +437,7 @@ export default function TrafficSplittingSection({
                   <TableRow key="latest-revision" hover={Boolean(latestReadyRevisionName)}>
                     <TableCell>
                       <Stack direction="row" spacing={1} alignItems="center">
-                        <Typography variant="body2">Latest Ready</Typography>
+                        <Typography variant="body2">Latest Ready Revision</Typography>
                         {latestReadyRevisionName ? (
                           <Chip
                             label={latestReadyRevisionName}
