@@ -42,6 +42,7 @@ This document describes how to work with this repository, both for **human contr
   - For React performance and compatibility with React Compiler, **do not use** `useCallback` or `useMemo` in new or updated code; prefer plain functions and components and rely on the compiler's optimizations instead.
 - **Type usage**
   - Prefer concrete, specific types and avoid `any` in new code.
+  - Prefer leveraging TypeScript's type inference for local variables and obvious return types to keep code concise; use explicit annotations mainly for public APIs (exported functions, components, hooks, and modules) and when inference is unclear.
   - When you need to accept unknown input, use `unknown` first and then narrow the type with proper checks.
   - Make use of TypeScript utility types (built-in and custom) to avoid duplication and keep types DRY.
   - When defining type aliases:
