@@ -150,12 +150,27 @@ export default function HttpRoutesList() {
                 <TableCell>Name</TableCell>
                 <TableCell>Namespace</TableCell>
                 <TableCell>Hosts</TableCell>
+                <TableCell>Backends</TableCell>
                 <TableCell>Visibility</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filtered.map(r => {
                 const vis = getVisibilityLabel(r);
+                const backendRefs =
+                  r.spec?.rules?.flatMap(rule => rule.backendRefs ?? []) ?? [];
+                const backendSummary =
+                  backendRefs.length > 0
+                    ? backendRefs
+                        .map(br => {
+                          const name = br.name ?? '';
+                          if (!name) return null;
+                          const ns = br.namespace || r.metadata.namespace || '';
+                          return ns ? `${name} (${ns})` : name;
+                        })
+                        .filter(Boolean)
+                        .join(', ')
+                    : '-';
                 return (
                   <TableRow key={`${r.metadata.namespace}/${r.metadata.name}`} hover>
                     <TableCell>
@@ -173,6 +188,11 @@ export default function HttpRoutesList() {
                       </Typography>
                     </TableCell>
                     <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {backendSummary}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
                       {vis === 'external' ? (
                         <Chip label="external" color="success" size="small" />
                       ) : vis === 'internal' ? (
@@ -186,7 +206,7 @@ export default function HttpRoutesList() {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={5}>
                     <Typography variant="body2" color="text.secondary">
                       No items
                     </Typography>

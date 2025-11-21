@@ -5,7 +5,18 @@ export type HTTPRoute = {
   apiVersion?: string;
   kind?: string;
   metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
-  spec?: { hostnames?: string[] };
+  spec?: {
+    hostnames?: string[];
+    rules?: Array<{
+      backendRefs?: Array<{
+        group?: string;
+        kind?: string;
+        name?: string;
+        namespace?: string;
+        port?: number;
+      }>;
+    }>;
+  };
 };
 
 type OwnerReference = {
