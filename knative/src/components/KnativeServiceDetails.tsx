@@ -3,6 +3,7 @@ import { Box, CircularProgress, Stack, Typography } from '@mui/material';
 import type { KnativeRevision, KnativeService } from '../types/knative';
 import {
   fetchAutoscalingGlobalDefaults,
+  fetchNetworkTemplates,
   getService,
   listRevisions,
   redeployService,
@@ -50,6 +51,10 @@ export default function KnativeServiceDetails({
     stableWindow: string;
     activationScaleDefault: number;
   } | null>(null);
+  const [networkTemplates, setNetworkTemplates] = React.useState<{
+    domainTemplate: string;
+    tagTemplate: string;
+  } | null>(null);
 
   const refetchServiceAndRevisions = React.useCallback(async () => {
     try {
@@ -86,6 +91,22 @@ export default function KnativeServiceDetails({
       try {
         const d = await fetchAutoscalingGlobalDefaults();
         if (!cancelled) setAutoDefaults(d);
+      } catch {
+        // ignore; keep null
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch network templates (domain-template, tag-template)
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const t = await fetchNetworkTemplates();
+        if (!cancelled) setNetworkTemplates(t);
       } catch {
         // ignore; keep null
       }
@@ -189,12 +210,16 @@ export default function KnativeServiceDetails({
         title="HTTPRoutes (external)"
         namespace={namespace}
         routes={externalHttpRoutes}
+        serviceName={name}
+        networkTemplates={networkTemplates ?? undefined}
       />
 
       <HttpRoutesSection
         title="HTTPRoutes (internal)"
         namespace={namespace}
         routes={internalHttpRoutes}
+        serviceName={name}
+        networkTemplates={networkTemplates ?? undefined}
       />
 
       <AutoscalingSettings

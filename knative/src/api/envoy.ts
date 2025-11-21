@@ -5,7 +5,17 @@ export type HTTPRoute = {
   apiVersion?: string;
   kind?: string;
   metadata: { name: string; namespace?: string; labels?: Record<string, string> };
-  spec?: { hostnames?: string[] };
+  spec?: {
+    hostnames?: string[];
+    rules?: Array<{
+      backendRefs?: Array<{
+        group?: string;
+        kind?: string;
+        name?: string;
+        port?: number;
+      }>;
+    }>;
+  };
 };
 
 type SecurityPolicy = {
@@ -66,7 +76,10 @@ export async function listHttpRoutesByVisibilityForService(
   try {
     const labelSelector1 = encodeURIComponent(`serving.knative.dev/service=${serviceName}`);
     const labelSelector2 = encodeURIComponent(`serving.knative.dev/route=${serviceName}`);
-    const [res1, res2] = (await Promise.all([
+    const labelSelectorDmNs = encodeURIComponent(
+      `serving.knative.dev/domainMappingNamespace=${namespace}`
+    );
+    const [res1, res2, resDm] = (await Promise.all([
       ApiProxy.request(
         `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelector1}`,
         { method: 'GET' }
@@ -75,11 +88,27 @@ export async function listHttpRoutesByVisibilityForService(
         `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelector2}`,
         { method: 'GET' }
       ),
-    ])) as [K8sList<HTTPRoute>, K8sList<HTTPRoute>];
+      ApiProxy.request(
+        `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelectorDmNs}`,
+        { method: 'GET' }
+      ),
+    ])) as [K8sList<HTTPRoute>, K8sList<HTTPRoute>, K8sList<HTTPRoute>];
     const mergedByName = new Map<string, HTTPRoute>();
     [...(res1.items ?? []), ...(res2.items ?? [])].forEach(r => {
       if (r?.metadata?.name) mergedByName.set(r.metadata.name, r);
     });
+    // Add DomainMapping HTTPRoutes that actually point to this service via backendRefs
+    for (const r of resDm.items ?? []) {
+      const rules = r.spec?.rules ?? [];
+      const pointsToService = rules.some(rule =>
+        (rule.backendRefs ?? []).some(
+          br => (br.kind ?? 'Service') === 'Service' && (br.name ?? '') === serviceName
+        )
+      );
+      if (pointsToService && r.metadata?.name) {
+        mergedByName.set(r.metadata.name, r);
+      }
+    }
     const all = Array.from(mergedByName.values());
     const external = all.filter(
       r => (r.metadata?.labels ?? {})['networking.knative.dev/visibility'] === ''

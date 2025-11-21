@@ -285,3 +285,26 @@ export async function fetchAutoscalingGlobalDefaults(): Promise<{
     activationScaleDefault: DOC_DEFAULTS.activationScaleDefault,
   };
 }
+
+export async function fetchNetworkTemplates(): Promise<{
+  domainTemplate: string;
+  tagTemplate: string;
+}> {
+  const DEFAULTS = {
+    domainTemplate: '{{.Name}}.{{.Namespace}}.{{.Domain}}',
+    tagTemplate: '{{.Tag}}-{{.Name}}',
+  };
+  try {
+    const cm = (await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-network`,
+      { method: 'GET' }
+    )) as K8sConfigMap;
+    const d = cm?.data ?? {};
+    return {
+      domainTemplate: d['domain-template'] || DEFAULTS.domainTemplate,
+      tagTemplate: d['tag-template'] || DEFAULTS.tagTemplate,
+    };
+  } catch {
+    return { ...DEFAULTS };
+  }
+}
