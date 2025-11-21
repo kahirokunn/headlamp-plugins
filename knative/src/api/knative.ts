@@ -550,3 +550,85 @@ export async function fetchIngressClass(): Promise<string | null> {
     return null;
   }
 }
+
+type GatewayConfig = {
+  class: string;
+  gateway: string; // format: "namespace/name"
+  service?: string;
+  supportedFeatures?: string[];
+};
+
+type GatewayConfigResult = {
+  external: GatewayConfig | null;
+  local: GatewayConfig | null;
+};
+
+/**
+ * Fetch Gateway API configuration from the config-gateway ConfigMap.
+ *
+ * Returns gateway information for external and local gateways when Gateway API is configured;
+ * otherwise returns null for both.
+ */
+export async function fetchGatewayConfig(): Promise<GatewayConfigResult> {
+  try {
+    const cm = (await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-gateway`,
+      { method: 'GET' }
+    )) as K8sConfigMap;
+    const data = cm?.data ?? {};
+
+    const parseGatewayYaml = (yamlStr: string | undefined): GatewayConfig | null => {
+      if (!yamlStr || !yamlStr.trim()) return null;
+      try {
+        // Simple YAML parsing for the expected structure
+        // Format: "- class: xxx\n  gateway: namespace/name\n  service: ..."
+        // We parse the first entry in the array
+        const lines = yamlStr.trim().split('\n');
+        let classVal = '';
+        let gatewayVal = '';
+        let inFirstEntry = false;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Check if we're starting a new array entry
+          if (trimmed === '-' || trimmed.startsWith('- ')) {
+            inFirstEntry = true;
+            // Process the first line after "-"
+            const rest = trimmed.substring(1).trim();
+            if (rest.startsWith('class:')) {
+              classVal = rest.substring(6).trim();
+            } else if (rest.startsWith('gateway:')) {
+              gatewayVal = rest.substring(8).trim();
+            }
+            continue;
+          }
+          // If we're in the first entry, parse its fields
+          if (inFirstEntry) {
+            // If we hit another "-" at the start of a line, we've moved to the next entry
+            if (trimmed.startsWith('-')) {
+              break;
+            }
+            if (trimmed.startsWith('class:')) {
+              classVal = trimmed.substring(6).trim();
+            } else if (trimmed.startsWith('gateway:')) {
+              gatewayVal = trimmed.substring(8).trim();
+            }
+          }
+        }
+        if (classVal && gatewayVal) {
+          return { class: classVal, gateway: gatewayVal };
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    const external = parseGatewayYaml(data['external-gateways']);
+    const local = parseGatewayYaml(data['local-gateways']);
+
+    return { external, local };
+  } catch {
+    // Treat unreadable config as "not configured"
+    return { external: null, local: null };
+  }
+}

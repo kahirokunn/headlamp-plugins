@@ -18,6 +18,7 @@ import ServiceHeader from './ServiceHeader';
 import TrafficSplittingSection from './TrafficSplittingSection';
 import DomainMappingSection from './DomainMappingSection';
 import IngressIntegrationsSection from './IngressIntegrationsSection';
+import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 
 export default function KnativeServiceDetails({
   namespace: namespaceProp,
@@ -164,14 +165,11 @@ export default function KnativeServiceDetails({
     );
   }
 
-  const expectedIngressClass = 'gateway-api.ingress.networking.knative.dev';
-  const shouldShowIngressWarning = ingressClassLoaded && ingressClass !== expectedIngressClass;
+  const shouldShowIngressWarning = ingressClassLoaded && ingressClass !== INGRESS_CLASS_GATEWAY_API;
 
-  function formatIngressClass(): string {
+  function displayIngressClass(): string {
     if (!ingressClassLoaded) return '';
-    if (!ingressClass) return '(not set)';
-    const suffix = '.ingress.networking.knative.dev';
-    return ingressClass.endsWith(suffix) ? ingressClass.slice(0, -suffix.length) : ingressClass;
+    return formatIngressClass(ingressClass);
   }
 
   return (
@@ -182,7 +180,7 @@ export default function KnativeServiceDetails({
           ingress.class
           {ingressClass == null
             ? ' is not set.'
-            : ` is set to "${ingressClass}", not "${expectedIngressClass}".`}
+            : ` is set to "${ingressClass}", not "${INGRESS_CLASS_GATEWAY_API}".`}
         </Alert>
       )}
       <ServiceHeader
@@ -196,7 +194,7 @@ export default function KnativeServiceDetails({
 
       {ingressClassLoaded && (
         <Typography variant="body2" color="text.secondary">
-          Ingress class: {formatIngressClass()}
+          Ingress class: {displayIngressClass()}
         </Typography>
       )}
 

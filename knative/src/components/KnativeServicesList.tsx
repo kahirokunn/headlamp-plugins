@@ -24,7 +24,14 @@ import {
   Typography,
 } from '@mui/material';
 import type { KnativeService } from '../types/knative';
-import { fetchIngressClass, getAge, listServices, listDomainMappings } from '../api/knative';
+import {
+  fetchIngressClass,
+  fetchGatewayConfig,
+  getAge,
+  listServices,
+  listDomainMappings,
+} from '../api/knative';
+import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
 import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
 
@@ -55,6 +62,10 @@ export default function KnativeServicesList() {
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
   const [ingressClass, setIngressClass] = React.useState<string | null>(null);
   const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
+  const [gatewayConfig, setGatewayConfig] = React.useState<{
+    external: { gateway: string } | null;
+    local: { gateway: string } | null;
+  } | null>(null);
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
@@ -99,6 +110,25 @@ export default function KnativeServicesList() {
         if (!cancelled) {
           setIngressClass(null);
           setIngressClassLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const config = await fetchGatewayConfig();
+        if (!cancelled) {
+          setGatewayConfig(config);
+        }
+      } catch {
+        if (!cancelled) {
+          setGatewayConfig({ external: null, local: null });
         }
       }
     })();
@@ -204,11 +234,17 @@ export default function KnativeServicesList() {
     );
   }
 
-  function formatIngressClass(): string {
+  function displayIngressClass(): string {
     if (!ingressClassLoaded) return '';
-    if (!ingressClass) return '(not set)';
-    const suffix = '.ingress.networking.knative.dev';
-    return ingressClass.endsWith(suffix) ? ingressClass.slice(0, -suffix.length) : ingressClass;
+    return formatIngressClass(ingressClass);
+  }
+
+  function getGatewayForService(svc: KnativeService): string | null {
+    if (!gatewayConfig) return null;
+    const isInternal =
+      svc.metadata?.labels?.['networking.knative.dev/visibility'] === 'cluster-local';
+    const gateway = isInternal ? gatewayConfig.local : gatewayConfig.external;
+    return gateway?.gateway || null;
   }
 
   return (
@@ -240,7 +276,7 @@ export default function KnativeServicesList() {
 
       {ingressClassLoaded && (
         <Typography variant="body2" color="text.secondary">
-          Ingress class: {formatIngressClass()}
+          Ingress class: {displayIngressClass()}
         </Typography>
       )}
 
@@ -311,6 +347,7 @@ export default function KnativeServicesList() {
                   Age
                 </TableSortLabel>
               </TableCell>
+              {ingressClass === INGRESS_CLASS_GATEWAY_API && <TableCell>Gateway</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -416,6 +453,17 @@ export default function KnativeServicesList() {
                     )}
                   </TableCell>
                   <TableCell>{getAge(svc.metadata.creationTimestamp)}</TableCell>
+                  {ingressClass === INGRESS_CLASS_GATEWAY_API && (
+                    <TableCell>
+                      {getGatewayForService(svc) ? (
+                        <Typography variant="body2">{getGatewayForService(svc)}</Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          -
+                        </Typography>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}

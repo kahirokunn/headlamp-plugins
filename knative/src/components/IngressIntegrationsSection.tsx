@@ -1,4 +1,5 @@
 import GatewayApiIngressSection from './ingress/gateway-api/GatewayApiIngressSection';
+import { INGRESS_CLASS_GATEWAY_API } from '../config/ingress';
 
 type IngressIntegrationsSectionProps = {
   namespace: string;
@@ -27,13 +28,13 @@ export default function IngressIntegrationsSection({
   }
 
   switch (ingressClass) {
-    case 'gateway-api.ingress.networking.knative.dev':
+    case INGRESS_CLASS_GATEWAY_API:
       return <GatewayApiIngressSection namespace={namespace} serviceName={serviceName} />;
 
     // Future: Add other ingress providers here
-    // case 'contour.ingress.networking.knative.dev':
+    // case INGRESS_CLASS_CONTOUR:
     //   return <ContourIngressSection namespace={namespace} serviceName={serviceName} />;
-    // case 'istio.ingress.networking.knative.dev':
+    // case INGRESS_CLASS_ISTIO:
     //   return <IstioIngressSection namespace={namespace} serviceName={serviceName} />;
 
     default:
