@@ -85,7 +85,6 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
     { key: '', value: '', id: Math.random().toString(36).slice(2) },
   ]);
   const [enableBasicAuth, setEnableBasicAuth] = React.useState(false);
-  const [basicAuthSecretName, setBasicAuthSecretName] = React.useState('basic-auth');
   const [basicAuthUsername, setBasicAuthUsername] = React.useState('');
   const [basicAuthPassword, setBasicAuthPassword] = React.useState('');
   const [enableIpAccessControl, setEnableIpAccessControl] = React.useState(false);
@@ -150,6 +149,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
       throw new Error('Timed out while waiting for HTTPRoute of the new service');
     }
     const httpRouteName = route.metadata.name;
+    const basicAuthSecretName = `${serviceName}-basic-auth`;
 
     if (enableBasicAuth) {
       await upsertBasicAuthSecret(
@@ -196,8 +196,8 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
       return;
     }
     if (visibility === 'external' && enableBasicAuth) {
-      if (!basicAuthSecretName.trim() || !basicAuthUsername.trim() || !basicAuthPassword) {
-        notifyError('Basic Auth: secret name, username, and password are required');
+      if (!basicAuthUsername.trim() || !basicAuthPassword) {
+        notifyError('Basic Auth: username and password are required');
         return;
       }
     }
@@ -404,7 +404,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
               <Stack spacing={2}>
                 <Box>
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography variant="subtitle2">Basic Authentication (optional)</Typography>
+                    <Typography variant="subtitle2">Basic Authentication</Typography>
                     <FormControlLabel
                       control={
                         <Switch
@@ -418,13 +418,6 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
                   </Stack>
                   {enableBasicAuth && (
                     <Stack direction="row" spacing={1} mt={1}>
-                      <TextField
-                        label="Secret Name"
-                        size="small"
-                        value={basicAuthSecretName}
-                        onChange={e => setBasicAuthSecretName(e.target.value)}
-                        sx={{ flex: 1 }}
-                      />
                       <TextField
                         label="Username"
                         size="small"
@@ -446,7 +439,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
 
                 <Box>
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography variant="subtitle2">IP Access Control (optional)</Typography>
+                    <Typography variant="subtitle2">IP Access Control</Typography>
                     <FormControlLabel
                       control={
                         <Switch
@@ -461,7 +454,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
                   {enableIpAccessControl && (
                     <Stack spacing={1} mt={1}>
                       <Typography variant="body2" color="text.secondary">
-                        CIDR形式で入力してください (例: 203.0.113.0/24)。空行は無視されます。
+                        Enter in CIDR format (e.g., 203.0.113.0/24).
                       </Typography>
                       <Stack spacing={1}>
                         <Typography variant="subtitle2">Allow CIDRs</Typography>

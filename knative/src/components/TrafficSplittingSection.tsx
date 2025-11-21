@@ -387,7 +387,7 @@ export default function TrafficSplittingSection({
                               ...prev,
                               [r.metadata.name]: unique,
                             }));
-                            // タグ確定後は未確定入力のヘルパーを消す
+                            // Clear pending input helper after tag is confirmed
                             setPendingTagInputs(prev => ({
                               ...prev,
                               [r.metadata.name]: '',

@@ -38,7 +38,7 @@ This document describes how to work with this repository, both for **human contr
   - Follow existing code style in each package.
   - Prefer explicit types over `any`; keep TypeScript strict where reasonable.
   - Keep components small and composable; extract shared logic into `components/common` or `src/api` as appropriate.
-  - Respect the **DRY (Don't Repeat Yourself)** principle: avoid duplicating logic or structures, and extract shared behavior into reusable functions, hooks, components, or utility modules.
+  - Respect the **DRY (Don't Repeat Yourself)** and **YAGNI (You Aren't Gonna Need It)** principles: avoid duplicating logic or structures, extract shared behavior into reusable functions, hooks, components, or utility modules, and avoid adding features or abstractions before there is a clear, concrete need.
 - **Type usage**
   - Prefer concrete, specific types and avoid `any` in new code.
   - When you need to accept unknown input, use `unknown` first and then narrow the type with proper checks.
