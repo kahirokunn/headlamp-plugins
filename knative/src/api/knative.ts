@@ -1,6 +1,6 @@
 import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
 import * as yaml from 'js-yaml';
-import * as z from 'zod';
+import * as z from 'zod/mini';
 import type {
   KnativeService,
   KnativeRevision,
@@ -559,8 +559,8 @@ export async function fetchIngressClass(): Promise<string | null> {
 const GatewayConfigSchema = z.object({
   class: z.string(),
   gateway: z.string(), // format: "namespace/name"
-  service: z.string().optional(),
-  supportedFeatures: z.array(z.string()).optional(),
+  service: z.optional(z.string()),
+  supportedFeatures: z.optional(z.array(z.string())),
 });
 
 type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
