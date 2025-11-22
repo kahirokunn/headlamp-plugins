@@ -140,7 +140,7 @@ async function buildHtpasswdLine(username: string, password: string): Promise<st
   return `${username}:{SHA}${b64}`;
 }
 
-export async function getHttpRoute(namespace: string, name: string): Promise<HTTPRoute | null> {
+async function getHttpRoute(namespace: string, name: string): Promise<HTTPRoute | null> {
   try {
     return (await ApiProxy.request(
       `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes/${name}`,

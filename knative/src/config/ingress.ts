@@ -4,7 +4,7 @@
  * These values correspond to the ingress.class setting in the config-network ConfigMap.
  */
 
-export const INGRESS_CLASS_SUFFIX = '.ingress.networking.knative.dev';
+const INGRESS_CLASS_SUFFIX = '.ingress.networking.knative.dev';
 
 export const INGRESS_CLASS_GATEWAY_API = `gateway-api${INGRESS_CLASS_SUFFIX}`;
 

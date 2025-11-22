@@ -14,7 +14,7 @@ const ObjectMetaSchema = z.object({
   creationTimestamp: z.optional(z.string()),
 });
 
-export type ObjectMeta = z.infer<typeof ObjectMetaSchema>;
+type ObjectMeta = z.infer<typeof ObjectMetaSchema>;
 
 const ConditionSchema = z.object({
   type: z.string(),
@@ -27,7 +27,7 @@ const ConditionSchema = z.object({
 
 export type Condition = z.infer<typeof ConditionSchema>;
 
-export const TrafficTargetSchema = z.object({
+const TrafficTargetSchema = z.object({
   percent: z.optional(z.number()),
   tag: z.optional(z.string()),
   latestRevision: z.optional(z.boolean()),
@@ -51,7 +51,7 @@ const KnativeServiceSpecSchema = z.object({
   template: z.optional(KnativeServiceTemplateSchema),
 });
 
-export type KnativeServiceSpec = z.infer<typeof KnativeServiceSpecSchema>;
+type KnativeServiceSpec = z.infer<typeof KnativeServiceSpecSchema>;
 
 const KnativeServiceTrafficStatusEntrySchema = z.object({
   percent: z.optional(z.number()),
@@ -74,7 +74,7 @@ const KnativeServiceStatusSchema = z.object({
   traffic: z.optional(z.array(KnativeServiceTrafficStatusEntrySchema)),
 });
 
-export type KnativeServiceStatus = z.infer<typeof KnativeServiceStatusSchema>;
+type KnativeServiceStatus = z.infer<typeof KnativeServiceStatusSchema>;
 
 export const KnativeServiceSchema = z.object({
   apiVersion: z.literal('serving.knative.dev/v1'),
@@ -112,7 +112,7 @@ export const K8sListSchema = z.object({
 
 type K8sListBase = z.infer<typeof K8sListSchema>;
 
-export type K8sList<T> = Omit<K8sListBase, 'items'> & {
+type K8sList<T> = Omit<K8sListBase, 'items'> & {
   items: T[];
 };
 
