@@ -29,7 +29,15 @@ import { formatIngressClass } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
 import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
 
-type SortKey = 'name' | 'namespace' | 'url' | 'latestRevision' | 'traffic' | 'tags' | 'age';
+type SortKey =
+  | 'name'
+  | 'namespace'
+  | 'visibility'
+  | 'url'
+  | 'latestRevision'
+  | 'traffic'
+  | 'tags'
+  | 'age';
 
 function trafficSummary(svc: KnativeService): string {
   const tr = svc.spec?.traffic || [];
@@ -139,6 +147,13 @@ export default function KnativeServicesList() {
         return name.toLowerCase();
       case 'namespace':
         return ns.toLowerCase();
+      case 'visibility': {
+        const visibilityLabel =
+          svc.metadata?.labels?.['networking.knative.dev/visibility'] === 'cluster-local'
+            ? 'internal'
+            : 'external';
+        return visibilityLabel;
+      }
       case 'url': {
         const urls = domainByServiceKey[serviceKey];
         const primaryUrl = (urls && urls[0]) || svc.status?.url || '';
@@ -265,6 +280,15 @@ export default function KnativeServicesList() {
                   Namespace
                 </TableSortLabel>
               </TableCell>
+              <TableCell sortDirection={sortKey === 'visibility' ? sortDir : false}>
+                <TableSortLabel
+                  active={sortKey === 'visibility'}
+                  direction={sortKey === 'visibility' ? sortDir : 'asc'}
+                  onClick={() => handleSort('visibility')}
+                >
+                  Visibility
+                </TableSortLabel>
+              </TableCell>
               <TableCell sortDirection={sortKey === 'url' ? sortDir : false}>
                 <TableSortLabel
                   active={sortKey === 'url'}
@@ -329,6 +353,10 @@ export default function KnativeServicesList() {
                   (svc.spec?.traffic ?? []).map(t => t.tag).filter((v): v is string => Boolean(v))
                 )
               ).sort();
+              const visibilityLabel =
+                svc.metadata?.labels?.['networking.knative.dev/visibility'] === 'cluster-local'
+                  ? 'Internal'
+                  : 'External';
               return (
                 <TableRow key={`${ns}/${name}`} hover>
                   <TableCell>
@@ -342,22 +370,16 @@ export default function KnativeServicesList() {
                       >
                         {name}
                       </Button>
-                      {svc.metadata?.labels?.['networking.knative.dev/visibility'] ===
-                      'cluster-local' ? (
-                        <Chip label="Internal" color="info" size="small" />
-                      ) : (
-                        <Chip label="External" color="info" size="small" />
-                      )}
-                      {svc.status?.conditions?.find(
-                        c => c.type === 'Ready' && c.status === 'True'
-                      ) ? (
-                        <Chip label="Ready" color="success" size="small" />
-                      ) : (
-                        <Chip label="Not Ready" color="warning" size="small" />
-                      )}
                     </Stack>
                   </TableCell>
                   <TableCell>{ns}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={visibilityLabel}
+                      color={visibilityLabel === 'Internal' ? 'default' : 'primary'}
+                      size="small"
+                    />
+                  </TableCell>
                   <TableCell>
                     {domainByServiceKey[`${ns}/${name}`] &&
                     domainByServiceKey[`${ns}/${name}`].length > 0 ? (
