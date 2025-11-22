@@ -98,30 +98,51 @@ const ServiceSchema = z.object({
 // Derive type from schema
 type Service = z.infer<typeof ServiceSchema>;
 
-// Result type for API helpers
-type ApiResult<T> =
-  | { isSuccess: true; data: T }
-  | { isSuccess: false; errorMessage: string };
+// Generic Result type for API helpers
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
-// Validate response without throwing
-export async function getService(namespace: string, name: string): Promise<ApiResult<Service>> {
-  const response = await ApiProxy.request(`/api/v1/namespaces/${namespace}/services/${name}`, {
-    method: 'GET',
-  });
+// Domain‑specific error type (define explicit variants instead of using `any`)
+type ServiceError =
+  | { kind: 'ValidationError'; message: string }
+  | { kind: 'ApiError'; message: string };
+
+// Validate response without throwing; use early returns on failure
+export async function getService(
+  namespace: string,
+  name: string
+): Promise<Result<Service, ServiceError>> {
+  let response: unknown;
+  try {
+    response = await ApiProxy.request(`/api/v1/namespaces/${namespace}/services/${name}`, {
+      method: 'GET',
+    });
+  } catch (e) {
+    const message = (e as Error)?.message || 'Failed to fetch Service';
+    return { ok: false, error: { kind: 'ApiError', message } };
+  }
+
   const parsed = ServiceSchema.safeParse(response);
   if (!parsed.success) {
-    return { isSuccess: false, errorMessage: 'Invalid Service response' };
+    return {
+      ok: false,
+      error: { kind: 'ValidationError', message: 'Invalid Service response' },
+    };
   }
-  return { isSuccess: true, data: parsed.data };
+
+  return { ok: true, value: parsed.data };
 }
 ```
 
 - **Error handling for API wrappers**
-  - `ApiProxy.request()` throws `ApiError` for non‑OK HTTP responses, but **plugin-level API helpers must not use `throw` to represent expected API or validation failures**. Instead, always convert outcomes into explicit, typed result objects (for example the `ApiResult<T>` pattern above).
+  - `ApiProxy.request()` throws `ApiError` for non‑OK HTTP responses, but **plugin-level API helpers must not use `throw` in their public surface to represent expected API or validation failures**.
+    - Instead, always convert outcomes into explicit, typed result objects using the generic `Result<T, E>` pattern above.
+    - Prefer defining **domain‑specific error types** (for example `ServiceError`, `DomainMappingError`, etc.) rather than using `string` or `any` for error values.
+    - Use **early return** style to keep success and failure paths simple and easy to follow.
   - For operations that do not need the response body (e.g. simple PATCH/DELETE helpers), prefer **non-throwing wrappers** that:
     - simply `await ApiProxy.request(...)` to ensure the HTTP call succeeds (do **not** call `z.unknown().parseAsync(...)` just to “consume” the response), and
-    - return an explicit result object such as `{ isSuccess: boolean; errorMessage?: string }` instead of throwing.
-  - UI/components should consume these helpers by checking the boolean flag (for example `if (!result.isSuccess) { notifyError(...) }`) rather than relying on `try`/`catch` for expected API failures.
+    - return an explicit `Result<void, E>` (for example `{ ok: true }` on success, `{ ok: false, error }` on failure) instead of throwing.
+  - UI/components should consume these helpers by checking `result.ok` (for example `if (!result.ok) { notifyError(result.error.message); }`) rather than relying on `try`/`catch` for expected API failures.
+  - **New plugin code should avoid introducing `throw` in application logic**; use `Result<T, E>` and explicit error values to represent all expected failure modes.
 
 - **Form implementation**
   - **All forms MUST be implemented using `react-hook-form` with `zod/mini` for validation.**

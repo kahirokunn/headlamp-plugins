@@ -50,20 +50,28 @@ const DeploymentListSchema = z.object({
 });
 
 export async function listServices(): Promise<KnativeService[]> {
-  const res = KnativeServiceListSchema.parse(
-    await ApiProxy.request(`${KN_SERVICE_BASE}/services`, {
-      method: 'GET',
-    })
-  );
-  return res.items ?? [];
+  const response = await ApiProxy.request(`${KN_SERVICE_BASE}/services`, {
+    method: 'GET',
+  });
+  const parsed = KnativeServiceListSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid Knative Service list response');
+  }
+  return parsed.data.items ?? [];
 }
 
 export async function getService(namespace: string, name: string): Promise<KnativeService> {
-  return KnativeServiceSchema.parse(
-    await ApiProxy.request(`${KN_SERVICE_BASE}/namespaces/${namespace}/services/${name}`, {
+  const response = await ApiProxy.request(
+    `${KN_SERVICE_BASE}/namespaces/${namespace}/services/${name}`,
+    {
       method: 'GET',
-    })
+    }
   );
+  const parsed = KnativeServiceSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid Knative Service response');
+  }
+  return parsed.data;
 }
 
 /**
@@ -74,7 +82,7 @@ export async function createSecret(params: {
   name: string;
   data: Record<string, string>;
   type?: string;
-}): Promise<unknown> {
+}): Promise<void> {
   const { namespace, name, data, type } = params;
   const body = {
     apiVersion: 'v1',
@@ -83,13 +91,11 @@ export async function createSecret(params: {
     type: type || 'Opaque',
     stringData: data,
   };
-  const res = await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
+  await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  // We currently do not rely on the Secret body; validate as unknown.
-  return z.unknown().parse(res);
 }
 
 /**
@@ -189,12 +195,16 @@ export async function createService(params: {
     },
   };
 
-  const res = await ApiProxy.request(`${KN_SERVICE_BASE}/namespaces/${namespace}/services`, {
+  const response = await ApiProxy.request(`${KN_SERVICE_BASE}/namespaces/${namespace}/services`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return KnativeServiceSchema.parse(res);
+  const parsed = KnativeServiceSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid Knative Service response');
+  }
+  return parsed.data;
 }
 
 export async function listRevisions(
@@ -202,22 +212,26 @@ export async function listRevisions(
   serviceName: string
 ): Promise<KnativeRevision[]> {
   const label = encodeURIComponent(`serving.knative.dev/service=${serviceName}`);
-  const res = KnativeRevisionListSchema.parse(
-    await ApiProxy.request(
-      `${KN_SERVICE_BASE}/namespaces/${namespace}/revisions?labelSelector=${label}`,
-      { method: 'GET' }
-    )
+  const response = await ApiProxy.request(
+    `${KN_SERVICE_BASE}/namespaces/${namespace}/revisions?labelSelector=${label}`,
+    { method: 'GET' }
   );
-  return res.items ?? [];
+  const parsed = KnativeRevisionListSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid Knative Revision list response');
+  }
+  return parsed.data.items ?? [];
 }
 
 export async function listDomainMappings(): Promise<DomainMapping[]> {
-  const res = DomainMappingListSchema.parse(
-    await ApiProxy.request(`${KN_DOMAIN_MAPPING_BASE}/domainmappings`, {
-      method: 'GET',
-    })
-  );
-  return res.items ?? [];
+  const response = await ApiProxy.request(`${KN_DOMAIN_MAPPING_BASE}/domainmappings`, {
+    method: 'GET',
+  });
+  const parsed = DomainMappingListSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid DomainMapping list response');
+  }
+  return parsed.data.items ?? [];
 }
 
 export async function createDomainMapping(params: {
@@ -243,7 +257,7 @@ export async function createDomainMapping(params: {
       },
     },
   };
-  const res = await ApiProxy.request(
+  const response = await ApiProxy.request(
     `${KN_DOMAIN_MAPPING_BASE}/namespaces/${namespace}/domainmappings`,
     {
       method: 'POST',
@@ -251,7 +265,11 @@ export async function createDomainMapping(params: {
       body: JSON.stringify(body),
     }
   );
-  return DomainMappingSchema.parse(res);
+  const parsed = DomainMappingSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid DomainMapping response');
+  }
+  return parsed.data;
 }
 
 export async function createClusterDomainClaim(
@@ -264,22 +282,31 @@ export async function createClusterDomainClaim(
     metadata: { name: domain },
     spec: { namespace },
   };
-  const res = await ApiProxy.request(`${KN_CLUSTER_DOMAIN_CLAIM_BASE}/clusterdomainclaims`, {
+  const response = await ApiProxy.request(`${KN_CLUSTER_DOMAIN_CLAIM_BASE}/clusterdomainclaims`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return ClusterDomainClaimSchema.parse(res);
+  const parsed = ClusterDomainClaimSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid ClusterDomainClaim response');
+  }
+  return parsed.data;
 }
 
 export async function getClusterDomainClaim(domain: string): Promise<ClusterDomainClaim | null> {
   try {
-    const res = ClusterDomainClaimSchema.parse(
-      await ApiProxy.request(`${KN_CLUSTER_DOMAIN_CLAIM_BASE}/clusterdomainclaims/${domain}`, {
+    const response = await ApiProxy.request(
+      `${KN_CLUSTER_DOMAIN_CLAIM_BASE}/clusterdomainclaims/${domain}`,
+      {
         method: 'GET',
-      })
+      }
     );
-    return res ?? null;
+    const parsed = ClusterDomainClaimSchema.safeParse(response);
+    if (!parsed.success) {
+      return null;
+    }
+    return parsed.data ?? null;
   } catch (e) {
     // 404 or permission errors -> treat as not found for UI hinting
     return null;
@@ -287,12 +314,10 @@ export async function getClusterDomainClaim(domain: string): Promise<ClusterDoma
 }
 
 export async function deleteDomainMapping(namespace: string, domain: string): Promise<void> {
-  const res = await ApiProxy.request(
+  await ApiProxy.request(
     `${KN_DOMAIN_MAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
     { method: 'DELETE' }
   );
-  // Validate but ignore body.
-  z.unknown().parse(res);
 }
 
 export async function annotateDomainMapping(
@@ -305,7 +330,7 @@ export async function annotateDomainMapping(
       annotations,
     },
   };
-  const res = await ApiProxy.request(
+  const response = await ApiProxy.request(
     `${KN_DOMAIN_MAPPING_BASE}/namespaces/${namespace}/domainmappings/${domain}`,
     {
       method: 'PATCH',
@@ -313,31 +338,30 @@ export async function annotateDomainMapping(
       body: JSON.stringify(body),
     }
   );
-  return DomainMappingSchema.parse(res);
+  const parsed = DomainMappingSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid DomainMapping response');
+  }
+  return parsed.data;
 }
 
 export async function redeployService(namespace: string, name: string): Promise<void> {
   const now = new Date().toISOString();
-  const res = await ApiProxy.request(
-    `${KN_SERVICE_BASE}/namespaces/${namespace}/services/${name}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/merge-patch+json' },
-      body: JSON.stringify({
-        spec: {
-          template: {
-            metadata: {
-              annotations: {
-                'knative.headlamp.dev/redeployAt': now,
-              },
+  await ApiProxy.request(`${KN_SERVICE_BASE}/namespaces/${namespace}/services/${name}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/merge-patch+json' },
+    body: JSON.stringify({
+      spec: {
+        template: {
+          metadata: {
+            annotations: {
+              'knative.headlamp.dev/redeployAt': now,
             },
           },
         },
-      }),
-    }
-  );
-  // No useful body is expected; validate as unknown.
-  z.unknown().parse(res);
+      },
+    }),
+  });
 }
 
 async function findDeploymentNameForRevision(
@@ -345,13 +369,15 @@ async function findDeploymentNameForRevision(
   revisionName: string
 ): Promise<string> {
   const label = encodeURIComponent(`serving.knative.dev/revision=${revisionName}`);
-  const res = DeploymentListSchema.parse(
-    await ApiProxy.request(
-      `/apis/apps/v1/namespaces/${namespace}/deployments?labelSelector=${label}`,
-      { method: 'GET' }
-    )
+  const response = await ApiProxy.request(
+    `/apis/apps/v1/namespaces/${namespace}/deployments?labelSelector=${label}`,
+    { method: 'GET' }
   );
-  const dep = res.items?.[0];
+  const parsed = DeploymentListSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid Deployment list response');
+  }
+  const dep = parsed.data.items?.[0];
   if (!dep?.metadata?.name) {
     throw new Error('Deployment for revision not found');
   }
@@ -365,26 +391,21 @@ export async function restartService(namespace: string, service: KnativeService)
   }
   const depName = await findDeploymentNameForRevision(namespace, revisionName);
   const now = new Date().toISOString();
-  const res = await ApiProxy.request(
-    `/apis/apps/v1/namespaces/${namespace}/deployments/${depName}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
-      body: JSON.stringify({
-        spec: {
-          template: {
-            metadata: {
-              annotations: {
-                'kubectl.kubernetes.io/restartedAt': now,
-              },
+  await ApiProxy.request(`/apis/apps/v1/namespaces/${namespace}/deployments/${depName}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
+    body: JSON.stringify({
+      spec: {
+        template: {
+          metadata: {
+            annotations: {
+              'kubectl.kubernetes.io/restartedAt': now,
             },
           },
         },
-      }),
-    }
-  );
-  // No useful body is expected; validate as unknown.
-  z.unknown().parse(res);
+      },
+    }),
+  });
 }
 
 export async function updateTraffic(
@@ -392,7 +413,7 @@ export async function updateTraffic(
   name: string,
   traffic: TrafficTarget[]
 ): Promise<KnativeService> {
-  const res = await ApiProxy.request(
+  const response = await ApiProxy.request(
     `${KN_SERVICE_BASE}/namespaces/${namespace}/services/${name}`,
     {
       method: 'PATCH',
@@ -404,7 +425,11 @@ export async function updateTraffic(
       }),
     }
   );
-  return KnativeServiceSchema.parse(res);
+  const parsed = KnativeServiceSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid Knative Service response');
+  }
+  return parsed.data;
 }
 
 export function getAge(timestamp?: string): string {
@@ -488,7 +513,7 @@ export async function updateAutoscalingSettings(
     (body.spec.template as any).spec = templateSpecPatch;
   }
 
-  const res = await ApiProxy.request(
+  const response = await ApiProxy.request(
     `${KN_SERVICE_BASE}/namespaces/${namespace}/services/${name}`,
     {
       method: 'PATCH',
@@ -496,7 +521,11 @@ export async function updateAutoscalingSettings(
       body: JSON.stringify(body),
     }
   );
-  return KnativeServiceSchema.parse(res);
+  const parsed = KnativeServiceSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Invalid Knative Service response');
+  }
+  return parsed.data;
 }
 
 const K8sConfigMapSchema = z.object({
@@ -540,20 +569,30 @@ export async function fetchAutoscalingGlobalDefaults(): Promise<{
   let autoscaler: K8sConfigMap | undefined;
   let defaults: K8sConfigMap | undefined;
   try {
-    autoscaler = K8sConfigMapSchema.parse(
-      await ApiProxy.request(`/api/v1/namespaces/knative-serving/configmaps/config-autoscaler`, {
+    const response = await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-autoscaler`,
+      {
         method: 'GET',
-      })
+      }
     );
+    const parsed = K8sConfigMapSchema.safeParse(response);
+    if (parsed.success) {
+      autoscaler = parsed.data;
+    }
   } catch {
     // ignore
   }
   try {
-    defaults = K8sConfigMapSchema.parse(
-      await ApiProxy.request(`/api/v1/namespaces/knative-serving/configmaps/config-defaults`, {
+    const response = await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-defaults`,
+      {
         method: 'GET',
-      })
+      }
     );
+    const parsed = K8sConfigMapSchema.safeParse(response);
+    if (parsed.success) {
+      defaults = parsed.data;
+    }
   } catch {
     // ignore
   }
@@ -598,12 +637,14 @@ export async function fetchNetworkTemplates(): Promise<{
     tagTemplate: '{{.Tag}}-{{.Name}}',
   };
   try {
-    const cm = K8sConfigMapSchema.parse(
-      await ApiProxy.request(`/api/v1/namespaces/knative-serving/configmaps/config-network`, {
+    const response = await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-network`,
+      {
         method: 'GET',
-      })
+      }
     );
-    const d = cm?.data ?? {};
+    const parsed = K8sConfigMapSchema.safeParse(response);
+    const d = (parsed.success ? parsed.data : undefined)?.data ?? {};
     return {
       domainTemplate: d['domain-template'] || DEFAULTS.domainTemplate,
       tagTemplate: d['tag-template'] || DEFAULTS.tagTemplate,
@@ -622,12 +663,17 @@ export async function fetchNetworkTemplates(): Promise<{
  */
 export async function fetchIngressClass(): Promise<string | null> {
   try {
-    const cm = K8sConfigMapSchema.parse(
-      await ApiProxy.request(`/api/v1/namespaces/knative-serving/configmaps/config-network`, {
+    const response = await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-network`,
+      {
         method: 'GET',
-      })
+      }
     );
-    const raw = cm?.data?.['ingress.class'];
+    const parsed = K8sConfigMapSchema.safeParse(response);
+    if (!parsed.success) {
+      return null;
+    }
+    const raw = parsed.data?.data?.['ingress.class'];
     if (raw == null) {
       return null;
     }
@@ -748,12 +794,17 @@ async function getGatewayClassControllerName(className: string): Promise<string 
     return undefined;
   }
   try {
-    const res = GatewayClassSchema.parse(
-      await ApiProxy.request(`/apis/gateway.networking.k8s.io/v1/gatewayclasses/${className}`, {
+    const response = await ApiProxy.request(
+      `/apis/gateway.networking.k8s.io/v1/gatewayclasses/${className}`,
+      {
         method: 'GET',
-      })
-    ) as GatewayClass;
-    const controllerName = res.spec?.controllerName;
+      }
+    );
+    const parsed = GatewayClassSchema.safeParse(response);
+    if (!parsed.success) {
+      return undefined;
+    }
+    const controllerName = (parsed.data as GatewayClass).spec?.controllerName;
     const trimmed = controllerName?.trim();
     return trimmed ? trimmed : undefined;
   } catch {
@@ -770,11 +821,17 @@ async function getGatewayClassControllerName(className: string): Promise<string 
  */
 export async function fetchGatewayConfig(): Promise<GatewayConfigResult> {
   try {
-    const cm = ConfigGatewaySchema.parse(
-      await ApiProxy.request(`/api/v1/namespaces/knative-serving/configmaps/config-gateway`, {
+    const response = await ApiProxy.request(
+      `/api/v1/namespaces/knative-serving/configmaps/config-gateway`,
+      {
         method: 'GET',
-      })
+      }
     );
+    const parsed = ConfigGatewaySchema.safeParse(response);
+    if (!parsed.success) {
+      return { external: null, local: null };
+    }
+    const cm = parsed.data;
 
     const data = cm.data;
     const externalConfig = data?.['external-gateways'] ?? null;
