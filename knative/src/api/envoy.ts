@@ -245,25 +245,21 @@ export async function upsertBasicAuthSecret(
       type: 'Opaque',
       data: { '.htpasswd': dataB64 },
     };
-    await z.unknown().parseAsync(
-      ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-    );
+    await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
   } else {
     const patch = {
       data: { '.htpasswd': dataB64 },
       type: 'Opaque',
     };
-    await z.unknown().parseAsync(
-      ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/merge-patch+json' },
-        body: JSON.stringify(patch),
-      })
-    );
+    await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+      body: JSON.stringify(patch),
+    });
   }
 }
 
@@ -358,15 +354,13 @@ export async function createSecurityPolicyForHTTPRoute(params: {
         },
       },
     };
-    await z.unknown().parseAsync(
-      ApiProxy.request(
-        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/merge-patch+json' },
-          body: JSON.stringify(patch),
-        }
-      )
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+        body: JSON.stringify(patch),
+      }
     );
     return SecurityPolicySchema.parse(
       await ApiProxy.request(
@@ -425,15 +419,13 @@ export async function createIpAccessSecurityPolicy(params: {
         ...buildAuthorizationRulesForPatch(params.allowCidrs || [], params.denyCidrs || []),
       },
     };
-    await z.unknown().parseAsync(
-      ApiProxy.request(
-        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/merge-patch+json' },
-          body: JSON.stringify(patch),
-        }
-      )
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+        body: JSON.stringify(patch),
+      }
     );
     return SecurityPolicySchema.parse(
       await ApiProxy.request(

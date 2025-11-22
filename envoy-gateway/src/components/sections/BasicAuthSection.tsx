@@ -83,13 +83,21 @@ export default function BasicAuthSection({
     setValidationErrors([]);
     try {
       setLoading(true);
-      await upsertBasicAuthSecret(
+      const upsertResult = await upsertBasicAuthSecret(
         namespace,
         formSecretName,
         formUsername,
         formPassword,
         httpRouteName
       );
+      if (!upsertResult.isSuccess) {
+        notifyError(
+          upsertResult.errorMessage
+            ? `Failed to enable Basic authentication: ${upsertResult.errorMessage}`
+            : 'Failed to enable Basic authentication'
+        );
+        return;
+      }
       await createSecurityPolicyForHTTPRoute({
         namespace,
         policyName: httpRouteName,
@@ -119,7 +127,15 @@ export default function BasicAuthSection({
     if (!window.confirm('Disable Basic authentication?')) return;
     try {
       setLoading(true);
-      await disableBasicAuthForHTTPRoute({ namespace, httpRouteName });
+      const result = await disableBasicAuthForHTTPRoute({ namespace, httpRouteName });
+      if (!result.isSuccess) {
+        notifyError(
+          result.errorMessage
+            ? `Failed to disable Basic authentication: ${result.errorMessage}`
+            : 'Failed to disable Basic authentication'
+        );
+        return;
+      }
       notifySuccess('Basic authentication disabled');
       setOpenEdit(false);
       setValidationErrors([]);
@@ -148,7 +164,21 @@ export default function BasicAuthSection({
     setValidationErrors([]);
     try {
       setLoading(true);
-      await upsertBasicAuthSecret(namespace, secretName, formUsername, formPassword, httpRouteName);
+      const result = await upsertBasicAuthSecret(
+        namespace,
+        secretName,
+        formUsername,
+        formPassword,
+        httpRouteName
+      );
+      if (!result.isSuccess) {
+        notifyError(
+          result.errorMessage
+            ? `Failed to update Basic authentication: ${result.errorMessage}`
+            : 'Failed to update Basic authentication'
+        );
+        return;
+      }
       notifySuccess('Basic authentication credentials updated');
       setOpenEdit(false);
       setValidationErrors([]);

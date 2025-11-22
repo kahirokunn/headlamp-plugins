@@ -209,12 +209,20 @@ export default function IpAccessSection({
     setValidationErrors([]);
     try {
       setLoading(true);
-      await updateIpAccessSecurityPolicy({
+      const result = await updateIpAccessSecurityPolicy({
         namespace,
         policyName,
         allowCidrs: a,
         denyCidrs: d,
       });
+      if (!result.isSuccess) {
+        notifyError(
+          result.errorMessage
+            ? `Failed to update IP access control: ${result.errorMessage}`
+            : 'Failed to update IP access control'
+        );
+        return;
+      }
       notifySuccess('IP access control updated');
       setOpenEdit(false);
       setValidationErrors([]);
@@ -237,7 +245,15 @@ export default function IpAccessSection({
     if (!window.confirm('Delete all IP access rules?')) return;
     try {
       setLoading(true);
-      await disableIpAccessSecurityPolicy({ namespace, policyName });
+      const result = await disableIpAccessSecurityPolicy({ namespace, policyName });
+      if (!result.isSuccess) {
+        notifyError(
+          result.errorMessage
+            ? `Failed to disable IP access control: ${result.errorMessage}`
+            : 'Failed to disable IP access control'
+        );
+        return;
+      }
       notifySuccess('IP access control disabled');
       setOpenEdit(false);
       setValidationErrors([]);

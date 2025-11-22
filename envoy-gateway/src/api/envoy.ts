@@ -305,54 +305,61 @@ async function getSecret(namespace: string, name: string): Promise<K8sSecret | n
   }
 }
 
+type ApiResult = {
+  isSuccess: boolean;
+  errorMessage?: string;
+};
+
 export async function upsertBasicAuthSecret(
   namespace: string,
   name: string,
   username: string,
   password: string,
   ownerHttpRouteName?: string
-): Promise<void> {
-  const line = await buildHtpasswdLine(username, password);
-  const fileContent = `${line}\n`;
-  const dataB64 =
-    typeof btoa === 'function'
-      ? btoa(fileContent)
-      : Buffer.from(fileContent, 'utf8').toString('base64');
-  const existing = await getSecret(namespace, name);
-  if (!existing) {
-    const ownerRef = ownerHttpRouteName
-      ? await buildHttpRouteOwnerRef(namespace, ownerHttpRouteName)
-      : null;
-    const body = {
-      apiVersion: 'v1',
-      kind: 'Secret',
-      metadata: {
-        name,
-        namespace,
-        ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
-      },
-      type: 'Opaque',
-      data: { '.htpasswd': dataB64 },
-    };
-    await z.unknown().parseAsync(
-      ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
+): Promise<ApiResult> {
+  try {
+    const line = await buildHtpasswdLine(username, password);
+    const fileContent = `${line}\n`;
+    const dataB64 =
+      typeof btoa === 'function'
+        ? btoa(fileContent)
+        : Buffer.from(fileContent, 'utf8').toString('base64');
+    const existing = await getSecret(namespace, name);
+    if (!existing) {
+      const ownerRef = ownerHttpRouteName
+        ? await buildHttpRouteOwnerRef(namespace, ownerHttpRouteName)
+        : null;
+      const body = {
+        apiVersion: 'v1',
+        kind: 'Secret',
+        metadata: {
+          name,
+          namespace,
+          ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+        },
+        type: 'Opaque',
+        data: { '.htpasswd': dataB64 },
+      };
+      await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      })
-    );
-  } else {
-    const patch = {
-      data: { '.htpasswd': dataB64 },
-      type: 'Opaque',
-    };
-    await z.unknown().parseAsync(
-      ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
+      });
+    } else {
+      const patch = {
+        data: { '.htpasswd': dataB64 },
+        type: 'Opaque',
+      };
+      await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/merge-patch+json' },
         body: JSON.stringify(patch),
-      })
-    );
+      });
+    }
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
   }
 }
 
@@ -394,15 +401,13 @@ export async function createSecurityPolicyForHTTPRoute(params: {
         },
       },
     };
-    await z.unknown().parseAsync(
-      ApiProxy.request(
-        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/merge-patch+json' },
-          body: JSON.stringify(patch),
-        }
-      )
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+        body: JSON.stringify(patch),
+      }
     );
     return SecurityPolicySchema.parse(
       await ApiProxy.request(
@@ -562,7 +567,7 @@ export async function updateRetryBackendTrafficPolicy(params: {
   timeout?: string;
   httpStatusCodes?: number[];
   triggers?: string[];
-}): Promise<void> {
+}): Promise<ApiResult> {
   const patch = {
     spec: {
       retry: {
@@ -587,16 +592,20 @@ export async function updateRetryBackendTrafficPolicy(params: {
       },
     },
   };
-  await z.unknown().parseAsync(
-    ApiProxy.request(
+  try {
+    await ApiProxy.request(
       `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/backendtrafficpolicies/${params.policyName}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/merge-patch+json' },
         body: JSON.stringify(patch),
       }
-    )
-  );
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }
 
 export async function detectRetryConfig(
@@ -730,15 +739,13 @@ export async function createIpAccessSecurityPolicy(params: {
         ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || [], true),
       },
     };
-    await z.unknown().parseAsync(
-      ApiProxy.request(
-        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/merge-patch+json' },
-          body: JSON.stringify(patch),
-        }
-      )
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+        body: JSON.stringify(patch),
+      }
     );
     return SecurityPolicySchema.parse(
       await ApiProxy.request(
@@ -784,22 +791,26 @@ export async function updateIpAccessSecurityPolicy(params: {
   policyName: string;
   allowCidrs: string[];
   denyCidrs: string[];
-}): Promise<void> {
+}): Promise<ApiResult> {
   const patch = {
     spec: {
       ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || [], true),
     },
   };
-  await z.unknown().parseAsync(
-    ApiProxy.request(
+  try {
+    await ApiProxy.request(
       `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${params.policyName}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/merge-patch+json' },
         body: JSON.stringify(patch),
       }
-    )
-  );
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }
 
 // ---- Disable/Delete helpers ----
@@ -807,51 +818,65 @@ export async function updateIpAccessSecurityPolicy(params: {
 export async function disableBasicAuthForHTTPRoute(params: {
   namespace: string;
   httpRouteName: string;
-}): Promise<void> {
+}): Promise<ApiResult> {
   const existing = await findSecurityPolicyForHTTPRoute(params.namespace, params.httpRouteName);
-  if (!existing?.metadata?.name) return;
+  if (!existing?.metadata?.name) {
+    return { isSuccess: true };
+  }
   const patch = { spec: { basicAuth: null } };
-  await z.unknown().parseAsync(
-    ApiProxy.request(
+  try {
+    await ApiProxy.request(
       `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/merge-patch+json' },
         body: JSON.stringify(patch),
       }
-    )
-  );
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }
 
 export async function disableIpAccessSecurityPolicy(params: {
   namespace: string;
   policyName: string;
-}): Promise<void> {
+}): Promise<ApiResult> {
   const patch = { spec: { authorization: null } };
-  await z.unknown().parseAsync(
-    ApiProxy.request(
+  try {
+    await ApiProxy.request(
       `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${params.policyName}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/merge-patch+json' },
         body: JSON.stringify(patch),
       }
-    )
-  );
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }
 
 export async function deleteRetryBackendTrafficPolicy(params: {
   namespace: string;
   policyName: string;
-}): Promise<void> {
-  await z.unknown().parseAsync(
-    ApiProxy.request(
+}): Promise<ApiResult> {
+  try {
+    await ApiProxy.request(
       `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/backendtrafficpolicies/${params.policyName}`,
       {
         method: 'DELETE',
       }
-    )
-  );
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }
 
 export async function listAllHttpRoutes(): Promise<HTTPRoute[]> {

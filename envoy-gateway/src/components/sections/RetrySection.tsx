@@ -63,7 +63,15 @@ export default function RetrySection({
     if (!window.confirm('Disable Retry configuration?')) return;
     try {
       setLoading(true);
-      await deleteRetryBackendTrafficPolicy({ namespace, policyName });
+      const result = await deleteRetryBackendTrafficPolicy({ namespace, policyName });
+      if (!result.isSuccess) {
+        notifyError(
+          result.errorMessage
+            ? `Failed to disable Retry config: ${result.errorMessage}`
+            : 'Failed to disable Retry config'
+        );
+        return;
+      }
       notifySuccess('Retry config disabled');
       setOpenEdit(false);
       setValidationErrors([]);
@@ -169,7 +177,7 @@ export default function RetrySection({
     setValidationErrors([]);
     try {
       setLoading(true);
-      await updateRetryBackendTrafficPolicy({
+      const result = await updateRetryBackendTrafficPolicy({
         namespace,
         policyName,
         numRetries,
@@ -179,6 +187,14 @@ export default function RetrySection({
         httpStatusCodes: parseNumberList(httpStatusCodes),
         triggers: parseStringList(triggers),
       });
+      if (!result.isSuccess) {
+        notifyError(
+          result.errorMessage
+            ? `Failed to update Retry config: ${result.errorMessage}`
+            : 'Failed to update Retry config'
+        );
+        return;
+      }
       notifySuccess('Retry config updated');
       setOpenEdit(false);
       setValidationErrors([]);

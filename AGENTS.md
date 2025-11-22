@@ -64,10 +64,12 @@ type Data = any;
 - **API response validation**
   - Use **`zod/mini`** for validating all API responses from `ApiProxy.request()`.
   - **All `ApiProxy.request()` responses MUST be validated through a Zod schema** before use.
+    - Exception: for operations where the response body is **never used at all** (e.g. simple PATCH/DELETE helpers that only care about HTTP success), you may `await ApiProxy.request(...)` directly without Zod validation, but **you must not parse-and-discard the body using `z.unknown().parseAsync(...)`**.
   - **All API response type definitions MUST be derived from Zod schemas** using `z.infer<typeof SchemaName>`.
   - Do not use type assertions (`as`) directly on `ApiProxy.request()` responses; instead, parse and validate them with Zod schemas first.
+  - **Do not call `.parse()` / `.parseAsync()` on Zod schemas in plugin code. Always use `.safeParse()` (or `.safeParseAsync()` if available) and handle the result (`success` / `error`) explicitly.**
   - **Schema design principle**: Define schemas based on the **actual structure of data returned from the API**, not necessarily the CRD definition. For example, even if a CRD defines `spec` as optional (for PATCH operations), if the API always returns it (due to mutating webhooks, defaults, etc.), make it required in the schema.
-  - **Important**: `zod/mini` keeps only a small set of methods (for example `.parse()` and `.check()`) and moves most validation helpers (like `.min()`, `.max()`, `.trim()`, etc.) to top‑level functions. In this repository, **prefer the functional API over method chaining**:
+  - **Important**: `zod/mini` keeps only a small set of methods (for example `.safeParse()` and `.check()`) and moves most validation helpers (like `.min()`, `.max()`, `.trim()`, etc.) to top‑level functions. In this repository, **prefer the functional API over method chaining**:
     - For optional / nullable, prefer `z.nullable(z.optional(z.string()))` (Zod Mini style) instead of the regular-Zod style `z.string().optional().nullable()`.
     - For checks like `min` / `max`, prefer `.check()` with functional checks, e.g. `z.string().check(z.minLength(5), z.maxLength(10))` instead of `z.string().min(5).max(10)`.
   - Example:
@@ -96,14 +98,30 @@ const ServiceSchema = z.object({
 // Derive type from schema
 type Service = z.infer<typeof ServiceSchema>;
 
-// Validate response
-export async function getService(namespace: string, name: string): Promise<Service> {
+// Result type for API helpers
+type ApiResult<T> =
+  | { isSuccess: true; data: T }
+  | { isSuccess: false; errorMessage: string };
+
+// Validate response without throwing
+export async function getService(namespace: string, name: string): Promise<ApiResult<Service>> {
   const response = await ApiProxy.request(`/api/v1/namespaces/${namespace}/services/${name}`, {
     method: 'GET',
   });
-  return ServiceSchema.parse(response);
+  const parsed = ServiceSchema.safeParse(response);
+  if (!parsed.success) {
+    return { isSuccess: false, errorMessage: 'Invalid Service response' };
+  }
+  return { isSuccess: true, data: parsed.data };
 }
 ```
+
+- **Error handling for API wrappers**
+  - `ApiProxy.request()` throws `ApiError` for non‑OK HTTP responses, but **plugin-level API helpers must not use `throw` to represent expected API or validation failures**. Instead, always convert outcomes into explicit, typed result objects (for example the `ApiResult<T>` pattern above).
+  - For operations that do not need the response body (e.g. simple PATCH/DELETE helpers), prefer **non-throwing wrappers** that:
+    - simply `await ApiProxy.request(...)` to ensure the HTTP call succeeds (do **not** call `z.unknown().parseAsync(...)` just to “consume” the response), and
+    - return an explicit result object such as `{ isSuccess: boolean; errorMessage?: string }` instead of throwing.
+  - UI/components should consume these helpers by checking the boolean flag (for example `if (!result.isSuccess) { notifyError(...) }`) rather than relying on `try`/`catch` for expected API failures.
 
 - **Form implementation**
   - **All forms MUST be implemented using `react-hook-form` with `zod/mini` for validation.**
