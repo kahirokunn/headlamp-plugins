@@ -51,16 +51,16 @@ export default function HttpRouteDetails() {
   const primaryHost = hosts?.[0] || '';
 
   return (
-    <Stack spacing={2} p={2}>
+    <Stack spacing={2} sx={{ p: 2 }}>
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <Typography variant="h5">HTTPRoute</Typography>
           <Chip label={name} size="small" />
           <Chip label={namespace} size="small" />
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Hosts:</Typography>
             {hosts?.length ? (
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                 {hosts.map(h => (
                   <Chip key={h} label={h} size="small" variant="outlined" />
                 ))}

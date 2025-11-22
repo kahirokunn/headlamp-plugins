@@ -258,7 +258,7 @@ export default function IpAccessSection({
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle1" gutterBottom>
             IP Access Control (Allow/Deny CIDRs)
           </Typography>
@@ -276,15 +276,15 @@ export default function IpAccessSection({
           </Typography>
         )}
         <Stack spacing={1}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Host:</Typography>
             <Typography variant="body2">{host || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">HTTPRoute:</Typography>
             <Typography variant="body2">{httpRouteName || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Policy:</Typography>
             <Typography variant="body2">{policyName || '-'}</Typography>
           </Stack>
@@ -348,7 +348,7 @@ export default function IpAccessSection({
       >
         <DialogTitle>Enable IP Access Control</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <Stack>
               <Typography variant="subtitle2" gutterBottom>
@@ -356,7 +356,7 @@ export default function IpAccessSection({
               </Typography>
               <Stack spacing={1}>
                 {formAllowCidrs.map((val, idx) => (
-                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                  <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <TextField
                       label="CIDR"
                       value={val}
@@ -391,7 +391,7 @@ export default function IpAccessSection({
               </Typography>
               <Stack spacing={1}>
                 {formDenyCidrs.map((val, idx) => (
-                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                  <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <TextField
                       label="CIDR"
                       value={val}
@@ -445,7 +445,7 @@ export default function IpAccessSection({
       >
         <DialogTitle>Edit IP Access Control</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <Stack>
               <Typography variant="subtitle2" gutterBottom>
@@ -453,7 +453,7 @@ export default function IpAccessSection({
               </Typography>
               <Stack spacing={1}>
                 {formAllowCidrs.map((val, idx) => (
-                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                  <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <TextField
                       label="CIDR"
                       value={val}
@@ -487,7 +487,7 @@ export default function IpAccessSection({
               </Typography>
               <Stack spacing={1}>
                 {formDenyCidrs.map((val, idx) => (
-                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                  <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <TextField
                       label="CIDR"
                       value={val}

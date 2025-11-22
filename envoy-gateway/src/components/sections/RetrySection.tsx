@@ -71,7 +71,9 @@ export default function RetrySection({
       onChanged?.();
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
-      notifyError(detail ? `Failed to disable Retry config: ${detail}` : 'Failed to disable Retry config');
+      notifyError(
+        detail ? `Failed to disable Retry config: ${detail}` : 'Failed to disable Retry config'
+      );
     } finally {
       setLoading(false);
     }
@@ -195,7 +197,7 @@ export default function RetrySection({
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle1" gutterBottom>
             Retry (BackendTrafficPolicy)
           </Typography>
@@ -213,37 +215,37 @@ export default function RetrySection({
           </Typography>
         )}
         <Stack spacing={1}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Host:</Typography>
             <Typography variant="body2">{host || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">HTTPRoute:</Typography>
             <Typography variant="body2">{httpRouteName || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Policy:</Typography>
             <Typography variant="body2">{policyName || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">numRetries:</Typography>
             <Typography variant="body2">{numRetries}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">backOff:</Typography>
             <Typography variant="body2">
               base={baseInterval}, max={maxInterval}
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">perRetry.timeout:</Typography>
             <Typography variant="body2">{timeout}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">retryOn.httpStatusCodes:</Typography>
             <Typography variant="body2">{httpStatusCodes || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">retryOn.triggers:</Typography>
             <Typography variant="body2">{triggers || '-'}</Typography>
           </Stack>
@@ -291,7 +293,7 @@ export default function RetrySection({
       >
         <DialogTitle>Enable Retry</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <TextField
               label="numRetries"
@@ -370,7 +372,7 @@ export default function RetrySection({
       >
         <DialogTitle>Edit Retry</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <TextField
               label="numRetries"

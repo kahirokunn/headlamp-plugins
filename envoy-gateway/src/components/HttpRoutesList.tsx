@@ -161,9 +161,9 @@ export default function HttpRoutesList() {
   }
 
   return (
-    <Stack spacing={2} p={2}>
+    <Stack spacing={2} sx={{ p: 2 }}>
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <Typography variant="h5">HTTPRoutes</Typography>
           <TextField
             size="small"

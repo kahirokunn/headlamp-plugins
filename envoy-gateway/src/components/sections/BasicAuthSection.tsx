@@ -170,7 +170,7 @@ export default function BasicAuthSection({
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={2}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle1" gutterBottom>
             Basic Authentication
           </Typography>
@@ -188,19 +188,19 @@ export default function BasicAuthSection({
           </Typography>
         )}
         <Stack spacing={1}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Host:</Typography>
             <Typography variant="body2">{host || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">HTTPRoute:</Typography>
             <Typography variant="body2">{httpRouteName || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Secret:</Typography>
             <Typography variant="body2">{secretName || '-'}</Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Usernames:</Typography>
             <Typography variant="body2">{usernames.length ? usernames.join(', ') : '-'}</Typography>
           </Stack>
@@ -259,7 +259,7 @@ export default function BasicAuthSection({
       >
         <DialogTitle>Enable Basic Authentication</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <TextField
               label="Secret Name"
@@ -313,7 +313,7 @@ export default function BasicAuthSection({
       >
         <DialogTitle>Edit Basic Authentication</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} mt={1}>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <TextField
               label="Secret Name"
