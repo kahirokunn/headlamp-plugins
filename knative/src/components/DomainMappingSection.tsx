@@ -1,13 +1,5 @@
 import React from 'react';
-import {
-  Box,
-  Button,
-  Chip,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, Button, Chip, Paper, Stack, TextField, Typography } from '@mui/material';
 import type { DomainMapping } from '../types/knative';
 import {
   createDomainMapping,
@@ -44,7 +36,9 @@ export default function DomainMappingSection({ namespace, serviceName }: Props) 
       setMappings(filtered);
     } catch (err) {
       const detail = (err as Error)?.message?.trim();
-      notifyError(detail ? `Failed to fetch DomainMappings: ${detail}` : 'Failed to fetch DomainMappings');
+      notifyError(
+        detail ? `Failed to fetch DomainMappings: ${detail}` : 'Failed to fetch DomainMappings'
+      );
       setMappings([]);
     } finally {
       setLoading(false);
@@ -283,5 +277,3 @@ export default function DomainMappingSection({ namespace, serviceName }: Props) 
     </Paper>
   );
 }
-
-

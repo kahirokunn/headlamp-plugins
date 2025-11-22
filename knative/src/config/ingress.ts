@@ -22,4 +22,3 @@ export function formatIngressClass(ingressClass: string | null): string {
     ? ingressClass.slice(0, -INGRESS_CLASS_SUFFIX.length)
     : ingressClass;
 }
-

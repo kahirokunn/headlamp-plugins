@@ -30,6 +30,7 @@ import {
   getAge,
   listServices,
   listDomainMappings,
+  GatewayConfigResult,
 } from '../api/knative';
 import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
@@ -62,10 +63,7 @@ export default function KnativeServicesList() {
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
   const [ingressClass, setIngressClass] = React.useState<string | null>(null);
   const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
-  const [gatewayConfig, setGatewayConfig] = React.useState<{
-    external: { gateway: string } | null;
-    local: { gateway: string } | null;
-  } | null>(null);
+  const [gatewayConfig, setGatewayConfig] = React.useState<GatewayConfigResult | null>(null);
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
@@ -119,22 +117,10 @@ export default function KnativeServicesList() {
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
     (async () => {
-      try {
-        const config = await fetchGatewayConfig();
-        if (!cancelled) {
-          setGatewayConfig(config);
-        }
-      } catch {
-        if (!cancelled) {
-          setGatewayConfig({ external: null, local: null });
-        }
-      }
+      const config = await fetchGatewayConfig();
+      setGatewayConfig(config);
     })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   React.useEffect(() => {
