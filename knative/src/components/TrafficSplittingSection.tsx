@@ -325,7 +325,7 @@ export default function TrafficSplittingSection({
                   return (
                     <TableRow key={r.metadata.name} hover>
                       <TableCell>
-                        <Stack direction="row" spacing={1} alignItems="center">
+                        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                           <Typography variant="body2">{r.metadata.name}</Typography>
                           {isLatest && (
                             <Chip
@@ -436,7 +436,7 @@ export default function TrafficSplittingSection({
                 rows.unshift(
                   <TableRow key="latest-revision" hover={Boolean(latestReadyRevisionName)}>
                     <TableCell>
-                      <Stack direction="row" spacing={1} alignItems="center">
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                         <Typography variant="body2">Latest Ready Revision</Typography>
                         {latestReadyRevisionName ? (
                           <Chip

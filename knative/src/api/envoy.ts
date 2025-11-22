@@ -248,7 +248,10 @@ async function findSecurityPolicyForHTTPRoute(
   }
 }
 
-function buildAuthorizationRules(allowCidrs: string[], denyCidrs: string[], forPatch = false) {
+function buildAuthorizationRuleList(
+  allowCidrs: string[],
+  denyCidrs: string[]
+): AuthorizationRule[] {
   const rules: AuthorizationRule[] = [];
   if (allowCidrs?.length) {
     rules.push({
@@ -265,7 +268,29 @@ function buildAuthorizationRules(allowCidrs: string[], denyCidrs: string[], forP
     });
   }
   if (rules.length === 0) {
-    return forPatch ? { authorization: null } : {};
+    return [];
+  }
+  return rules;
+}
+
+function buildAuthorizationRulesForPatch(
+  allowCidrs: string[],
+  denyCidrs: string[]
+): { authorization: Authorization | null } {
+  const rules = buildAuthorizationRuleList(allowCidrs, denyCidrs);
+  if (rules.length === 0) {
+    return { authorization: null };
+  }
+  return { authorization: { rules } };
+}
+
+function buildAuthorizationRulesForSpec(
+  allowCidrs: string[],
+  denyCidrs: string[]
+): { authorization?: Authorization } {
+  const rules = buildAuthorizationRuleList(allowCidrs, denyCidrs);
+  if (rules.length === 0) {
+    return {};
   }
   return { authorization: { rules } };
 }
@@ -345,7 +370,7 @@ export async function createIpAccessSecurityPolicy(params: {
   if (existing?.metadata?.name) {
     const patch = {
       spec: {
-        ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || [], true),
+        ...buildAuthorizationRulesForPatch(params.allowCidrs || [], params.denyCidrs || []),
       },
     };
     await ApiProxy.request(
@@ -378,7 +403,7 @@ export async function createIpAccessSecurityPolicy(params: {
           name: params.httpRouteName,
         },
       ],
-      ...buildAuthorizationRules(params.allowCidrs || [], params.denyCidrs || [], false),
+      ...buildAuthorizationRulesForSpec(params.allowCidrs || [], params.denyCidrs || []),
     },
   };
   return (await ApiProxy.request(

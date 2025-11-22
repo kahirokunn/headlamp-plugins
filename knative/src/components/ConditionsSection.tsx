@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Chip,
   Paper,
@@ -11,10 +10,8 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import type { KnativeService } from '../types/knative';
+import type { Condition } from '../types/knative';
 import { getAge } from '../api/knative';
-
-type Condition = NonNullable<KnativeService['status']>['conditions'][number];
 
 type ConditionsSectionProps = {
   title?: string;

@@ -14,6 +14,7 @@
       "zod/v4": ["node_modules/zod/v4/index.d.ts"],
       "zod/v4/core": ["node_modules/zod/v4/core/index.d.ts"],
       "zod/mini": ["node_modules/zod/mini/index.d.ts"],
+      "notistack": ["node_modules/notistack/index.d.ts"],
       "@mui/material": ["node_modules/@mui/material"],
       "@mui/material/*": ["node_modules/@mui/material/*"],
       "*": [
@@ -27,9 +28,7 @@
       "@iconify/react": [
         "node_modules/@kinvolk/headlamp-plugin/node_modules/@iconify/react/src/icon.js"
       ],
-      "@kinvolk/headlamp-plugin/lib": [
-        "node_modules/@kinvolk/headlamp-plugin/lib/index.d.ts"
-      ],
+      "@kinvolk/headlamp-plugin/lib": ["node_modules/@kinvolk/headlamp-plugin/lib/index.d.ts"],
       "@kinvolk/headlamp-plugin/lib/Crd": [
         "node_modules/@kinvolk/headlamp-plugin/lib/lib/crd.d.ts"
       ],

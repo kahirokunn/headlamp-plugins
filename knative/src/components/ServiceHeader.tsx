@@ -20,8 +20,8 @@ export default function ServiceHeader({
 }: ServiceHeaderProps) {
   return (
     <Paper variant="outlined" sx={{ position: 'sticky', top: 0, zIndex: 1, p: 2 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Stack direction="row" spacing={2} alignItems="center">
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <Typography variant="h5">{serviceName}</Typography>
           <Chip label={namespace} size="small" />
           {ready ? (

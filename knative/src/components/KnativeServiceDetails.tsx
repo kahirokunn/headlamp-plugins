@@ -173,7 +173,7 @@ export default function KnativeServiceDetails({
   }
 
   return (
-    <Stack spacing={2} p={2}>
+    <Stack spacing={2} sx={{ p: 2 }}>
       {shouldShowIngressWarning && (
         <Alert severity="warning" variant="filled">
           Gateway API integration may be limited because Knative "config-network" ConfigMap
@@ -185,7 +185,7 @@ export default function KnativeServiceDetails({
       )}
       <ServiceHeader
         serviceName={svc.metadata.name}
-        namespace={svc.metadata.namespace}
+        namespace={svc.metadata.namespace ?? namespace}
         ready={!!ready}
         acting={acting}
         onRedeploy={handleRedeploy}

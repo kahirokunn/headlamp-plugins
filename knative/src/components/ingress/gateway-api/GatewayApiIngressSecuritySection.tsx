@@ -52,7 +52,7 @@ export default function GatewayApiIngressSecuritySection({
 
       <Stack spacing={2}>
         <Box>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="subtitle2">Basic Authentication</Typography>
             <FormControlLabel
               control={
@@ -66,7 +66,7 @@ export default function GatewayApiIngressSecuritySection({
             />
           </Stack>
           {enableBasicAuth && (
-            <Stack direction="row" spacing={1} mt={1}>
+            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
               <TextField
                 label="Username"
                 size="small"
@@ -87,7 +87,7 @@ export default function GatewayApiIngressSecuritySection({
         </Box>
 
         <Box>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="subtitle2">IP Access Control</Typography>
             <FormControlLabel
               control={
@@ -101,14 +101,14 @@ export default function GatewayApiIngressSecuritySection({
             />
           </Stack>
           {enableIpAccessControl && (
-            <Stack spacing={1} mt={1}>
+            <Stack spacing={1} sx={{ mt: 1 }}>
               <Typography variant="body2" color="text.secondary">
                 Enter in CIDR format (e.g., 203.0.113.0/24).
               </Typography>
               <Stack spacing={1}>
                 <Typography variant="subtitle2">Allow CIDRs</Typography>
                 {ipAllowCidrs.map((v, idx) => (
-                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                  <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <TextField
                       label="CIDR"
                       size="small"
@@ -132,7 +132,7 @@ export default function GatewayApiIngressSecuritySection({
               <Stack spacing={1}>
                 <Typography variant="subtitle2">Deny CIDRs</Typography>
                 {ipDenyCidrs.map((v, idx) => (
-                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                  <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                     <TextField
                       label="CIDR"
                       size="small"

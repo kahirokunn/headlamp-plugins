@@ -167,7 +167,7 @@ export default function DomainMappingSection({ namespace, serviceName }: Props) 
         <Typography variant="subtitle1" gutterBottom>
           Custom Domains (DomainMapping)
         </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <TextField
             label="Domain name (e.g. app.example.com)"
             size="small"
@@ -201,7 +201,7 @@ export default function DomainMappingSection({ namespace, serviceName }: Props) 
                     key={`${dm.metadata?.namespace}/${dm.metadata?.name}`}
                     direction="row"
                     spacing={1}
-                    alignItems="center"
+                    sx={{ alignItems: 'center' }}
                   >
                     <Typography variant="body2">{dm.metadata?.name}</Typography>
                     {isReady ? (

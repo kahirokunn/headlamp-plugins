@@ -226,10 +226,10 @@ export default function KnativeServicesList() {
   }
 
   return (
-    <Stack spacing={2} p={2}>
+    <Stack spacing={2} sx={{ p: 2 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Typography variant="h5">KServices</Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <FormControl size="small" sx={{ minWidth: 220 }}>
             <InputLabel id="ns-filter">Namespace</InputLabel>
             <Select
@@ -360,7 +360,7 @@ export default function KnativeServicesList() {
               return (
                 <TableRow key={`${ns}/${name}`} hover>
                   <TableCell>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                       <Button
                         size="small"
                         onClick={() => {
@@ -383,7 +383,11 @@ export default function KnativeServicesList() {
                   <TableCell>
                     {domainByServiceKey[`${ns}/${name}`] &&
                     domainByServiceKey[`${ns}/${name}`].length > 0 ? (
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
                         {domainByServiceKey[`${ns}/${name}`].map(u => (
                           <a key={u} href={u} target="_blank" rel="noreferrer">
                             {u}
@@ -391,7 +395,7 @@ export default function KnativeServicesList() {
                         ))}
                       </Stack>
                     ) : svc.status?.url ? (
-                      <Stack direction="row" spacing={1} alignItems="center">
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                         <a href={svc.status.url} target="_blank" rel="noreferrer">
                           {svc.status.url}
                         </a>
@@ -404,7 +408,7 @@ export default function KnativeServicesList() {
                   </TableCell>
                   <TableCell>
                     {latestRevisionShort !== '-' ? (
-                      <Stack direction="row" spacing={1} alignItems="center">
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                         <Typography variant="body2">{latestRevisionShort}</Typography>
                         {isReady ? (
                           <Chip label="Ready" color="success" size="small" />
@@ -425,7 +429,11 @@ export default function KnativeServicesList() {
                   </TableCell>
                   <TableCell>
                     {tags.length ? (
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
                         {tags.map(tag => (
                           <Chip key={tag} label={tag} size="small" />
                         ))}

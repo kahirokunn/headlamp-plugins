@@ -74,7 +74,12 @@ export default function HttpRoutesSection({
         {routes && routes.length > 0 ? (
           <Stack spacing={0.5}>
             {routes.map(r => (
-              <Stack key={r.metadata.name} direction="row" spacing={1} alignItems="center">
+              <Stack
+                key={r.metadata.name}
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center' }}
+              >
                 <HeadlampLink
                   routeName="/plugins/envoy-gateway/httproutes/:namespace/:name"
                   params={{ namespace, name: r.metadata.name }}
@@ -82,7 +87,7 @@ export default function HttpRoutesSection({
                   {r.metadata.name}
                 </HeadlampLink>
                 {/* badges */}
-                <Stack direction="row" spacing={0.5} alignItems="center">
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                   {r.metadata.labels?.['serving.knative.dev/domainMappingUID'] && (
                     <Chip label="DomainMapping" size="small" color="info" />
                   )}
