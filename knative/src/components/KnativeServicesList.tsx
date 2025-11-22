@@ -230,7 +230,10 @@ export default function KnativeServicesList() {
     const isInternal =
       svc.metadata?.labels?.['networking.knative.dev/visibility'] === 'cluster-local';
     const gateway = isInternal ? gatewayConfig.local : gatewayConfig.external;
-    return gateway?.gateway || null;
+    if (!gateway?.gateway) {
+      return null;
+    }
+    return `${gateway.gateway.namespace}/${gateway.gateway.name}`;
   }
 
   return (

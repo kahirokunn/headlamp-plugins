@@ -640,14 +640,50 @@ export async function fetchIngressClass(): Promise<string | null> {
   }
 }
 
+const NamespacedNameSchema = z.object({
+  namespace: z.string(),
+  name: z.string(),
+});
+
+type NamespacedName = z.infer<typeof NamespacedNameSchema>;
+
+const NamespacedNameFromStringSchema = z.pipe(
+  z.string(),
+  z.transform((value: string): NamespacedName => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new Error('Invalid namespaced name: empty');
+    }
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex <= 0 || slashIndex === trimmed.length - 1) {
+      throw new Error('Invalid namespaced name format');
+    }
+    const namespace = trimmed.slice(0, slashIndex).trim();
+    const name = trimmed.slice(slashIndex + 1).trim();
+    const result = NamespacedNameSchema.safeParse({ namespace, name });
+    if (!result.success) {
+      throw new Error('Invalid namespaced name structure');
+    }
+    return result.data;
+  })
+);
+
 const GatewayConfigSchema = z.object({
   class: z.string(),
-  gateway: z.string(), // format: "namespace/name"
-  service: z.optional(z.string()),
+  gateway: NamespacedNameSchema,
+  service: z.optional(NamespacedNameSchema),
   supportedFeatures: z.optional(z.array(z.string())),
+  controllerName: z.optional(z.string()),
 });
 
 type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
+
+const RawGatewayConfigSchema = z.object({
+  class: z.string(),
+  gateway: NamespacedNameFromStringSchema, // format: "namespace/name"
+  service: z.optional(NamespacedNameFromStringSchema),
+  'supported-features': z.optional(z.array(z.string())),
+});
 
 const GatewayYamlEntrySchema = z.pipe(
   z.string(),
@@ -664,7 +700,17 @@ const GatewayYamlEntrySchema = z.pipe(
         return null;
       }
 
-      const result = GatewayConfigSchema.safeParse(firstEntry);
+      const rawResult = RawGatewayConfigSchema.safeParse(firstEntry);
+      if (!rawResult.success) {
+        return null;
+      }
+
+      const result = GatewayConfigSchema.safeParse({
+        class: rawResult.data.class,
+        gateway: rawResult.data.gateway,
+        service: rawResult.data.service,
+        supportedFeatures: rawResult.data['supported-features'],
+      });
       if (!result.success) {
         return null;
       }
@@ -690,6 +736,33 @@ export type GatewayConfigResult = {
   local: GatewayConfig | null;
 };
 
+const GatewayClassSchema = z.object({
+  spec: z.object({
+    controllerName: z.string(),
+  }),
+});
+
+type GatewayClass = z.infer<typeof GatewayClassSchema>;
+
+async function getGatewayClassControllerName(className: string): Promise<string | undefined> {
+  if (!className) {
+    return undefined;
+  }
+  try {
+    const res = GatewayClassSchema.parse(
+      await ApiProxy.request(`/apis/gateway.networking.k8s.io/v1/gatewayclasses/${className}`, {
+        method: 'GET',
+      })
+    ) as GatewayClass;
+    const controllerName = res.spec?.controllerName;
+    const trimmed = controllerName?.trim();
+    return trimmed ? trimmed : undefined;
+  } catch {
+    // If the GatewayClass cannot be fetched or parsed, treat controllerName as unknown.
+    return undefined;
+  }
+}
+
 /**
  * Fetch Gateway API configuration from the config-gateway ConfigMap.
  *
@@ -705,10 +778,33 @@ export async function fetchGatewayConfig(): Promise<GatewayConfigResult> {
     );
 
     const data = cm.data;
+    const externalConfig = data?.['external-gateways'] ?? null;
+    const localConfig = data?.['local-gateways'] ?? null;
+
+    const [externalControllerName, localControllerName] = await Promise.all([
+      externalConfig?.class ? getGatewayClassControllerName(externalConfig.class) : undefined,
+      localConfig?.class ? getGatewayClassControllerName(localConfig.class) : undefined,
+    ]);
+
+    const applyControllerName = (
+      cfg: GatewayConfig | null,
+      controllerName: string | undefined
+    ): GatewayConfig | null => {
+      if (!cfg) {
+        return null;
+      }
+      if (!controllerName) {
+        return cfg;
+      }
+      return {
+        ...cfg,
+        controllerName,
+      };
+    };
 
     return {
-      external: data?.['external-gateways'] ?? null,
-      local: data?.['local-gateways'] ?? null,
+      external: applyControllerName(externalConfig, externalControllerName),
+      local: applyControllerName(localConfig, localControllerName),
     };
   } catch {
     // Treat unreadable config as "not configured"
