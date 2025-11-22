@@ -14,10 +14,8 @@ import {
   TextField,
   Typography,
   InputAdornment,
-  Switch,
-  FormControlLabel,
 } from '@mui/material';
-import { createSecret, createService } from '../api/knative';
+import { createSecret, createService, fetchIngressClass } from '../api/knative';
 import {
   createIpAccessSecurityPolicy,
   createSecurityPolicyForHTTPRoute,
@@ -25,6 +23,7 @@ import {
   waitForServiceHttpRoute,
 } from '../api/envoy';
 import { useNotify } from './common/notifications/useNotify';
+import IngressSecuritySection from './IngressSecuritySection';
 
 type Props = {
   onClose: () => void;
@@ -90,6 +89,8 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
   const [enableIpAccessControl, setEnableIpAccessControl] = React.useState(false);
   const [ipAllowCidrs, setIpAllowCidrs] = React.useState<string[]>(['']);
   const [ipDenyCidrs, setIpDenyCidrs] = React.useState<string[]>(['']);
+  const [ingressClass, setIngressClass] = React.useState<string | null>(null);
+  const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const { notifyError, notifyInfo } = useNotify();
 
@@ -104,6 +105,14 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
       setMemoryLimit(memoryRequest);
     }
   }, [memoryRequest, memoryLimit]);
+
+  React.useEffect(() => {
+    (async () => {
+      const value = await fetchIngressClass();
+      setIngressClass(value);
+      setIngressClassLoaded(true);
+    })();
+  }, []);
 
   const handleAddEnvRow = () => {
     setEnvRows(prev => [...prev, { key: '', value: '', id: Math.random().toString(36).slice(2) }]);
@@ -356,7 +365,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
                 }}
               />
             </Stack>
-            <Stack direction="row" spacing={1} mt={1}>
+            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
               <TextField
                 label="Memory Request"
                 type="number"
@@ -396,120 +405,6 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
               <MenuItem value="internal">Internal (cluster-local)</MenuItem>
             </Select>
           </FormControl>
-          {visibility === 'external' && (
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                Security (Envoy Gateway)
-              </Typography>
-              <Stack spacing={2}>
-                <Box>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography variant="subtitle2">Basic Authentication</Typography>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          size="small"
-                          checked={enableBasicAuth}
-                          onChange={e => setEnableBasicAuth(e.target.checked)}
-                        />
-                      }
-                      label={enableBasicAuth ? 'Enabled' : 'Disabled'}
-                    />
-                  </Stack>
-                  {enableBasicAuth && (
-                    <Stack direction="row" spacing={1} mt={1}>
-                      <TextField
-                        label="Username"
-                        size="small"
-                        value={basicAuthUsername}
-                        onChange={e => setBasicAuthUsername(e.target.value)}
-                        sx={{ flex: 1 }}
-                      />
-                      <TextField
-                        label="Password"
-                        type="password"
-                        size="small"
-                        value={basicAuthPassword}
-                        onChange={e => setBasicAuthPassword(e.target.value)}
-                        sx={{ flex: 1 }}
-                      />
-                    </Stack>
-                  )}
-                </Box>
-
-                <Box>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography variant="subtitle2">IP Access Control</Typography>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          size="small"
-                          checked={enableIpAccessControl}
-                          onChange={e => setEnableIpAccessControl(e.target.checked)}
-                        />
-                      }
-                      label={enableIpAccessControl ? 'Enabled' : 'Disabled'}
-                    />
-                  </Stack>
-                  {enableIpAccessControl && (
-                    <Stack spacing={1} mt={1}>
-                      <Typography variant="body2" color="text.secondary">
-                        Enter in CIDR format (e.g., 203.0.113.0/24).
-                      </Typography>
-                      <Stack spacing={1}>
-                        <Typography variant="subtitle2">Allow CIDRs</Typography>
-                        {ipAllowCidrs.map((v, idx) => (
-                          <Stack key={idx} direction="row" spacing={1} alignItems="center">
-                            <TextField
-                              label="CIDR"
-                              size="small"
-                              value={v}
-                              onChange={e => handleChangeAllowCidr(idx, e.target.value)}
-                              sx={{ flex: 1 }}
-                            />
-                            <Button
-                              size="small"
-                              onClick={() => handleRemoveAllowCidr(idx)}
-                              disabled={ipAllowCidrs.length === 1}
-                            >
-                              Delete
-                            </Button>
-                          </Stack>
-                        ))}
-                        <Button size="small" onClick={handleAddAllowCidrRow}>
-                          Add Row
-                        </Button>
-                      </Stack>
-                      <Stack spacing={1}>
-                        <Typography variant="subtitle2">Deny CIDRs</Typography>
-                        {ipDenyCidrs.map((v, idx) => (
-                          <Stack key={idx} direction="row" spacing={1} alignItems="center">
-                            <TextField
-                              label="CIDR"
-                              size="small"
-                              value={v}
-                              onChange={e => handleChangeDenyCidr(idx, e.target.value)}
-                              sx={{ flex: 1 }}
-                            />
-                            <Button
-                              size="small"
-                              onClick={() => handleRemoveDenyCidr(idx)}
-                              disabled={ipDenyCidrs.length === 1}
-                            >
-                              Delete
-                            </Button>
-                          </Stack>
-                        ))}
-                        <Button size="small" onClick={handleAddDenyCidrRow}>
-                          Add Row
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  )}
-                </Box>
-              </Stack>
-            </Box>
-          )}
           <TextField
             label="Container Image"
             placeholder="ghcr.io/knative/helloworld-go:latest"
@@ -530,7 +425,10 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
             fullWidth
           />
           <Box>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+            <Stack
+              direction="row"
+              sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}
+            >
               <Typography variant="subtitle1">Environment Variables</Typography>
               <Button size="small" onClick={handleAddEnvRow}>
                 Add
@@ -538,7 +436,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
             </Stack>
             <Stack spacing={1}>
               {envRows.map(row => (
-                <Stack key={row.id} direction="row" spacing={1} alignItems="center">
+                <Stack key={row.id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <TextField
                     label="Key"
                     size="small"
@@ -560,6 +458,28 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
               ))}
             </Stack>
           </Box>
+          {visibility === 'external' && (
+            <IngressSecuritySection
+              ingressClass={ingressClass}
+              ingressClassLoaded={ingressClassLoaded}
+              enableBasicAuth={enableBasicAuth}
+              setEnableBasicAuth={setEnableBasicAuth}
+              basicAuthUsername={basicAuthUsername}
+              setBasicAuthUsername={setBasicAuthUsername}
+              basicAuthPassword={basicAuthPassword}
+              setBasicAuthPassword={setBasicAuthPassword}
+              enableIpAccessControl={enableIpAccessControl}
+              setEnableIpAccessControl={setEnableIpAccessControl}
+              ipAllowCidrs={ipAllowCidrs}
+              handleChangeAllowCidr={handleChangeAllowCidr}
+              handleAddAllowCidrRow={handleAddAllowCidrRow}
+              handleRemoveAllowCidr={handleRemoveAllowCidr}
+              ipDenyCidrs={ipDenyCidrs}
+              handleChangeDenyCidr={handleChangeDenyCidr}
+              handleAddDenyCidrRow={handleAddDenyCidrRow}
+              handleRemoveDenyCidr={handleRemoveDenyCidr}
+            />
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>
