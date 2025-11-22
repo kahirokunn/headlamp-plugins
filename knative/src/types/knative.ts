@@ -14,8 +14,6 @@ const ObjectMetaSchema = z.object({
   creationTimestamp: z.optional(z.string()),
 });
 
-type ObjectMeta = z.infer<typeof ObjectMetaSchema>;
-
 const ConditionSchema = z.object({
   type: z.string(),
   // Knative uses "True" | "False" | "Unknown", but allow any string for forward compatibility.
@@ -51,8 +49,6 @@ const KnativeServiceSpecSchema = z.object({
   template: z.optional(KnativeServiceTemplateSchema),
 });
 
-type KnativeServiceSpec = z.infer<typeof KnativeServiceSpecSchema>;
-
 const KnativeServiceTrafficStatusEntrySchema = z.object({
   percent: z.optional(z.number()),
   tag: z.optional(z.string()),
@@ -73,8 +69,6 @@ const KnativeServiceStatusSchema = z.object({
   conditions: z.optional(z.array(ConditionSchema)),
   traffic: z.optional(z.array(KnativeServiceTrafficStatusEntrySchema)),
 });
-
-type KnativeServiceStatus = z.infer<typeof KnativeServiceStatusSchema>;
 
 export const KnativeServiceSchema = z.object({
   apiVersion: z.literal('serving.knative.dev/v1'),
@@ -99,22 +93,6 @@ export const KnativeRevisionSchema = z.object({
 });
 
 export type KnativeRevision = z.infer<typeof KnativeRevisionSchema>;
-
-/*
- * Generic K8s list type.
- * The base schema validates the envelope; item typing is added via a generic TypeScript helper.
- */
-export const K8sListSchema = z.object({
-  apiVersion: z.string(),
-  kind: z.string(),
-  items: z.array(z.unknown()),
-});
-
-type K8sListBase = z.infer<typeof K8sListSchema>;
-
-type K8sList<T> = Omit<K8sListBase, 'items'> & {
-  items: T[];
-};
 
 /*
  * DomainMapping (serving.knative.dev/v1beta1).

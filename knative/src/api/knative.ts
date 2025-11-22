@@ -4,7 +4,6 @@ import * as z from 'zod/mini';
 import {
   ClusterDomainClaimSchema,
   DomainMappingSchema,
-  K8sListSchema,
   KnativeRevisionSchema,
   KnativeServiceSchema,
 } from '../types/knative';

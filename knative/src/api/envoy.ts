@@ -1,117 +1,153 @@
 import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
+import * as z from 'zod/mini';
 
-export type HTTPRoute = {
-  apiVersion?: string;
-  kind?: string;
-  metadata: {
-    name: string;
-    namespace?: string;
-    uid?: string;
-    labels?: Record<string, string>;
-  };
-  spec?: {
-    hostnames?: string[];
-    rules?: Array<{
-      backendRefs?: Array<{
-        group?: string;
-        kind?: string;
-        name?: string;
-        port?: number;
-      }>;
-    }>;
-  };
-};
+const ObjectMetaSchema = z.object({
+  name: z.string(),
+  namespace: z.optional(z.string()),
+  uid: z.optional(z.string()),
+  labels: z.optional(z.record(z.string(), z.string())),
+});
 
-type OwnerReference = {
-  apiVersion: string;
-  kind: string;
-  name: string;
-  uid: string;
-  controller?: boolean;
-  blockOwnerDeletion?: boolean;
-};
+const HTTPRouteBackendRefSchema = z.object({
+  group: z.optional(z.string()),
+  kind: z.optional(z.string()),
+  name: z.optional(z.string()),
+  port: z.optional(z.number()),
+});
 
-type AuthorizationPrincipal = {
-  clientCIDRs?: string[];
-};
+const HTTPRouteRuleSchema = z.object({
+  backendRefs: z.optional(z.array(HTTPRouteBackendRefSchema)),
+});
+
+const HTTPRouteSpecSchema = z.object({
+  hostnames: z.optional(z.array(z.string())),
+  rules: z.optional(z.array(HTTPRouteRuleSchema)),
+});
+
+export const HTTPRouteSchema = z.object({
+  apiVersion: z.optional(z.string()),
+  kind: z.optional(z.string()),
+  metadata: ObjectMetaSchema,
+  spec: z.optional(HTTPRouteSpecSchema),
+});
+
+export type HTTPRoute = z.infer<typeof HTTPRouteSchema>;
+
+const OwnerReferenceSchema = z.object({
+  apiVersion: z.string(),
+  kind: z.string(),
+  name: z.string(),
+  uid: z.string(),
+  controller: z.optional(z.boolean()),
+  blockOwnerDeletion: z.optional(z.boolean()),
+});
+
+type OwnerReference = z.infer<typeof OwnerReferenceSchema>;
+
+const AuthorizationPrincipalSchema = z.object({
+  clientCIDRs: z.optional(z.array(z.string())),
+});
+
+type AuthorizationPrincipal = z.infer<typeof AuthorizationPrincipalSchema>;
 
 type AuthorizationRuleAction = 'Allow' | 'Deny';
 
-type AuthorizationRule = {
-  name?: string;
-  principal?: AuthorizationPrincipal;
-  action?: AuthorizationRuleAction;
-};
+const AuthorizationRuleSchema = z.object({
+  name: z.optional(z.string()),
+  principal: z.optional(AuthorizationPrincipalSchema),
+  action: z.optional(z.string()),
+});
 
-type Authorization = {
-  rules?: AuthorizationRule[];
-};
+type AuthorizationRule = z.infer<typeof AuthorizationRuleSchema>;
 
-type SecurityPolicy = {
-  apiVersion?: string;
-  kind?: string;
-  metadata: {
-    name: string;
-    namespace?: string;
-    ownerReferences?: OwnerReference[];
-  };
-  spec?: {
-    targetRefs?: Array<{ group?: string; kind?: string; name?: string }>;
-    basicAuth?: { users?: { name?: string } };
-    apiKeyAuth?: {
-      credentialRefs?: Array<{ group?: string; kind?: string; name?: string }>;
-      extractFrom?: Array<{
-        headers?: string[];
-        queryParameters?: string[];
-        cookies?: string[];
-      }>;
-    };
-    jwt?: unknown;
-    authorization?: Authorization;
-  };
-};
+const AuthorizationSchema = z.object({
+  rules: z.optional(z.array(AuthorizationRuleSchema)),
+});
 
-type BackendTrafficPolicy = {
-  apiVersion?: string;
-  kind?: string;
-  metadata: {
-    name: string;
-    namespace?: string;
-    ownerReferences?: OwnerReference[];
-  };
-  spec?: {
-    targetRefs?: Array<{ group?: string; kind?: string; name?: string }>;
-    retry?: {
-      numRetries?: number;
-      perRetry?: {
-        backOff?: {
-          baseInterval?: string; // e.g., "100ms"
-          maxInterval?: string; // e.g., "10s"
-        };
-        timeout?: string; // e.g., "250ms"
-      };
-      retryOn?: {
-        httpStatusCodes?: number[];
-        triggers?: string[];
-      };
-    };
-  };
-};
+type Authorization = z.infer<typeof AuthorizationSchema>;
 
-type K8sSecret = {
-  apiVersion?: string;
-  kind?: string;
-  metadata?: {
-    name?: string;
-    namespace?: string;
-    uid?: string;
-    labels?: Record<string, string>;
-  };
-  data?: Record<string, string>;
-  type?: string;
-};
+const SecurityPolicySchema = z.object({
+  apiVersion: z.optional(z.string()),
+  kind: z.optional(z.string()),
+  metadata: z.object({
+    name: z.string(),
+    namespace: z.optional(z.string()),
+    ownerReferences: z.optional(z.array(OwnerReferenceSchema)),
+  }),
+  spec: z.optional(
+    z.object({
+      targetRefs: z.optional(
+        z.array(
+          z.object({
+            group: z.optional(z.string()),
+            kind: z.optional(z.string()),
+            name: z.optional(z.string()),
+          })
+        )
+      ),
+      basicAuth: z.optional(
+        z.object({
+          users: z.optional(
+            z.object({
+              name: z.optional(z.string()),
+            })
+          ),
+        })
+      ),
+      apiKeyAuth: z.optional(
+        z.object({
+          credentialRefs: z.optional(
+            z.array(
+              z.object({
+                group: z.optional(z.string()),
+                kind: z.optional(z.string()),
+                name: z.optional(z.string()),
+              })
+            )
+          ),
+          extractFrom: z.optional(
+            z.array(
+              z.object({
+                headers: z.optional(z.array(z.string())),
+                queryParameters: z.optional(z.array(z.string())),
+                cookies: z.optional(z.array(z.string())),
+              })
+            )
+          ),
+        })
+      ),
+      jwt: z.optional(z.unknown()),
+      authorization: z.optional(AuthorizationSchema),
+    })
+  ),
+});
 
-type K8sList<T> = { items?: T[] };
+type SecurityPolicy = z.infer<typeof SecurityPolicySchema>;
+
+const SecurityPolicyListSchema = z.object({
+  items: z.optional(z.array(SecurityPolicySchema)),
+});
+
+const K8sSecretSchema = z.object({
+  apiVersion: z.optional(z.string()),
+  kind: z.optional(z.string()),
+  metadata: z.optional(
+    z.object({
+      name: z.optional(z.string()),
+      namespace: z.optional(z.string()),
+      uid: z.optional(z.string()),
+      labels: z.optional(z.record(z.string(), z.string())),
+    })
+  ),
+  data: z.optional(z.record(z.string(), z.string())),
+  type: z.optional(z.string()),
+});
+
+type K8sSecret = z.infer<typeof K8sSecretSchema>;
+
+const HTTPRouteListSchema = z.object({
+  items: z.optional(z.array(HTTPRouteSchema)),
+});
 
 function base64Encode(bytes: Uint8Array): string {
   let bin = '';
@@ -142,10 +178,12 @@ async function buildHtpasswdLine(username: string, password: string): Promise<st
 
 async function getHttpRoute(namespace: string, name: string): Promise<HTTPRoute | null> {
   try {
-    return (await ApiProxy.request(
-      `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes/${name}`,
-      { method: 'GET' }
-    )) as HTTPRoute;
+    return HTTPRouteSchema.parse(
+      await ApiProxy.request(
+        `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes/${name}`,
+        { method: 'GET' }
+      )
+    );
   } catch {
     return null;
   }
@@ -168,9 +206,11 @@ async function buildHttpRouteOwnerRef(
 
 async function getSecret(namespace: string, name: string): Promise<K8sSecret | null> {
   try {
-    return (await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
-      method: 'GET',
-    })) as K8sSecret;
+    return K8sSecretSchema.parse(
+      await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
+        method: 'GET',
+      })
+    );
   } catch {
     return null;
   }
@@ -205,21 +245,25 @@ export async function upsertBasicAuthSecret(
       type: 'Opaque',
       data: { '.htpasswd': dataB64 },
     };
-    await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    await z.unknown().parseAsync(
+      ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    );
   } else {
     const patch = {
       data: { '.htpasswd': dataB64 },
       type: 'Opaque',
     };
-    await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/merge-patch+json' },
-      body: JSON.stringify(patch),
-    });
+    await z.unknown().parseAsync(
+      ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/merge-patch+json' },
+        body: JSON.stringify(patch),
+      })
+    );
   }
 }
 
@@ -228,10 +272,12 @@ async function findSecurityPolicyForHTTPRoute(
   httpRouteName: string
 ): Promise<SecurityPolicy | null> {
   try {
-    const res = (await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies`,
-      { method: 'GET' }
-    )) as K8sList<SecurityPolicy>;
+    const res = SecurityPolicyListSchema.parse(
+      await ApiProxy.request(
+        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies`,
+        { method: 'GET' }
+      )
+    );
     const items = res.items ?? [];
     return (
       items.find(sp =>
@@ -312,18 +358,22 @@ export async function createSecurityPolicyForHTTPRoute(params: {
         },
       },
     };
-    await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/merge-patch+json' },
-        body: JSON.stringify(patch),
-      }
+    await z.unknown().parseAsync(
+      ApiProxy.request(
+        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/merge-patch+json' },
+          body: JSON.stringify(patch),
+        }
+      )
     );
-    return (await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-      { method: 'GET' }
-    )) as SecurityPolicy;
+    return SecurityPolicySchema.parse(
+      await ApiProxy.request(
+        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+        { method: 'GET' }
+      )
+    );
   }
   const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: SecurityPolicy = {
@@ -349,14 +399,16 @@ export async function createSecurityPolicyForHTTPRoute(params: {
       },
     },
   };
-  return (await ApiProxy.request(
-    `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }
-  )) as SecurityPolicy;
+  return SecurityPolicySchema.parse(
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+    )
+  );
 }
 
 export async function createIpAccessSecurityPolicy(params: {
@@ -373,18 +425,22 @@ export async function createIpAccessSecurityPolicy(params: {
         ...buildAuthorizationRulesForPatch(params.allowCidrs || [], params.denyCidrs || []),
       },
     };
-    await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/merge-patch+json' },
-        body: JSON.stringify(patch),
-      }
+    await z.unknown().parseAsync(
+      ApiProxy.request(
+        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/merge-patch+json' },
+          body: JSON.stringify(patch),
+        }
+      )
     );
-    return (await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-      { method: 'GET' }
-    )) as SecurityPolicy;
+    return SecurityPolicySchema.parse(
+      await ApiProxy.request(
+        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
+        { method: 'GET' }
+      )
+    );
   }
   const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
   const body: SecurityPolicy = {
@@ -406,14 +462,16 @@ export async function createIpAccessSecurityPolicy(params: {
       ...buildAuthorizationRulesForSpec(params.allowCidrs || [], params.denyCidrs || []),
     },
   };
-  return (await ApiProxy.request(
-    `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }
-  )) as SecurityPolicy;
+  return SecurityPolicySchema.parse(
+    await ApiProxy.request(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+    )
+  );
 }
 
 // ---- HTTPRoute hostnames listing for external visibility ("") ----
@@ -432,7 +490,7 @@ export async function listHttpRoutesByVisibilityForService(
     const labelSelectorDmNs = encodeURIComponent(
       `serving.knative.dev/domainMappingNamespace=${namespace}`
     );
-    const [res1, res2, resDm] = (await Promise.all([
+    const [raw1, raw2, rawDm] = await Promise.all([
       ApiProxy.request(
         `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelector1}`,
         { method: 'GET' }
@@ -445,7 +503,10 @@ export async function listHttpRoutesByVisibilityForService(
         `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelectorDmNs}`,
         { method: 'GET' }
       ),
-    ])) as [K8sList<HTTPRoute>, K8sList<HTTPRoute>, K8sList<HTTPRoute>];
+    ]);
+    const res1 = HTTPRouteListSchema.parse(raw1);
+    const res2 = HTTPRouteListSchema.parse(raw2);
+    const resDm = HTTPRouteListSchema.parse(rawDm);
     const mergedByName = new Map<string, HTTPRoute>();
     [...(res1.items ?? []), ...(res2.items ?? [])].forEach(r => {
       if (r?.metadata?.name) mergedByName.set(r.metadata.name, r);
