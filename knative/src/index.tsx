@@ -18,6 +18,7 @@ import { addIcon } from '@iconify/react';
 import { registerRoute, registerSidebarEntry } from '@kinvolk/headlamp-plugin/lib';
 import KnativeServicesList from './components/KnativeServicesList';
 import KnativeServiceDetails from './components/KnativeServiceDetails';
+import KnativeNetworkingOverview from './components/KnativeNetworkingOverview';
 
 addIcon('custom:knative', {
   body: `<svg viewBox="0 0 735 593.5" xmlns="http://www.w3.org/2000/svg">
@@ -46,11 +47,25 @@ registerSidebarEntry({
   url: '/knative/services',
 });
 
+registerSidebarEntry({
+  parent: 'knative',
+  name: 'knetworking',
+  label: 'Networking',
+  url: '/knative/networking',
+});
+
 registerRoute({
   path: '/knative/services',
   sidebar: 'kservices',
   name: 'kservices',
   component: () => <KnativeServicesList />,
+});
+
+registerRoute({
+  path: '/knative/networking',
+  sidebar: 'knetworking',
+  name: 'knetworking',
+  component: () => <KnativeNetworkingOverview />,
 });
 
 registerRoute({

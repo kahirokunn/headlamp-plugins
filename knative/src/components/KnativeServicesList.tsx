@@ -24,15 +24,8 @@ import {
   Typography,
 } from '@mui/material';
 import type { KnativeService } from '../types/knative';
-import {
-  fetchIngressClass,
-  fetchGatewayConfig,
-  getAge,
-  listServices,
-  listDomainMappings,
-  GatewayConfigResult,
-} from '../api/knative';
-import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
+import { fetchIngressClass, getAge, listServices, listDomainMappings } from '../api/knative';
+import { formatIngressClass } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
 import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
 
@@ -63,7 +56,6 @@ export default function KnativeServicesList() {
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
   const [ingressClass, setIngressClass] = React.useState<string | null>(null);
   const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
-  const [gatewayConfig, setGatewayConfig] = React.useState<GatewayConfigResult | null>(null);
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
@@ -114,13 +106,6 @@ export default function KnativeServicesList() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  React.useEffect(() => {
-    (async () => {
-      const config = await fetchGatewayConfig();
-      setGatewayConfig(config);
-    })();
   }, []);
 
   React.useEffect(() => {
@@ -225,17 +210,6 @@ export default function KnativeServicesList() {
     return formatIngressClass(ingressClass);
   }
 
-  function getGatewayForService(svc: KnativeService): string | null {
-    if (!gatewayConfig) return null;
-    const isInternal =
-      svc.metadata?.labels?.['networking.knative.dev/visibility'] === 'cluster-local';
-    const gateway = isInternal ? gatewayConfig.local : gatewayConfig.external;
-    if (!gateway?.gateway) {
-      return null;
-    }
-    return `${gateway.gateway.namespace}/${gateway.gateway.name}`;
-  }
-
   return (
     <Stack spacing={2} p={2}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -336,7 +310,6 @@ export default function KnativeServicesList() {
                   Age
                 </TableSortLabel>
               </TableCell>
-              {ingressClass === INGRESS_CLASS_GATEWAY_API && <TableCell>Gateway</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -442,17 +415,6 @@ export default function KnativeServicesList() {
                     )}
                   </TableCell>
                   <TableCell>{getAge(svc.metadata.creationTimestamp)}</TableCell>
-                  {ingressClass === INGRESS_CLASS_GATEWAY_API && (
-                    <TableCell>
-                      {getGatewayForService(svc) ? (
-                        <Typography variant="body2">{getGatewayForService(svc)}</Typography>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          -
-                        </Typography>
-                      )}
-                    </TableCell>
-                  )}
                 </TableRow>
               );
             })}
