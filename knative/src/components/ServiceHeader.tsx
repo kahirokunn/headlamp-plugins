@@ -1,9 +1,9 @@
-import React from 'react';
 import { Button, Chip, Paper, Stack, Typography } from '@mui/material';
 
 type ServiceHeaderProps = {
   serviceName: string;
   namespace: string;
+  cluster?: string;
   ready: boolean;
   acting?: string | null;
   onRedeploy: () => void;
@@ -13,6 +13,7 @@ type ServiceHeaderProps = {
 export default function ServiceHeader({
   serviceName,
   namespace,
+  cluster,
   ready,
   acting,
   onRedeploy,
@@ -23,7 +24,8 @@ export default function ServiceHeader({
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <Typography variant="h5">{serviceName}</Typography>
-          <Chip label={namespace} size="small" />
+          <Chip label={`namespace: ${namespace}`} size="small" />
+          {cluster && <Chip label={`cluster: ${cluster}`} size="small" />}
           {ready ? (
             <Chip label="Ready" color="success" size="small" />
           ) : (

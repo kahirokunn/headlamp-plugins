@@ -24,15 +24,18 @@ import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress
 export default function KnativeServiceDetails({
   namespace: namespaceProp,
   name: nameProp,
+  cluster: clusterProp,
 }: {
   namespace?: string;
   name?: string;
+  cluster?: string;
 }) {
   const params = useParams<{ namespace: string; name: string }>();
   const namespace = namespaceProp ?? params.namespace ?? '';
   const name = nameProp ?? params.name ?? '';
-  const clusters = useClusters();
-  const cluster = clusters[0] || '';
+  const clustersFromHook = useClusters();
+  const clusters = clusterProp ? [clusterProp] : clustersFromHook;
+  const cluster = clusterProp ?? clustersFromHook[0] ?? '';
   const [acting, setActing] = React.useState<string | null>(null);
   const { notifyError, notifyInfo } = useNotify();
 
@@ -53,13 +56,16 @@ export default function KnativeServiceDetails({
     serviceName: name,
   });
 
-  const { data: autoDefaultsData, isLoading: autoDefaultsLoading } =
-    useFetchAutoscalingGlobalDefaultsQuery({ clusters }, { skip: clusters.length === 0 });
-
-  const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery(
+  const { data: autoDefaultsData } = useFetchAutoscalingGlobalDefaultsQuery(
     { clusters },
     { skip: clusters.length === 0 }
   );
+
+  const {
+    data: ingressClassData,
+    isLoading: ingressClassLoading,
+    isSuccess: ingressClassSuccess,
+  } = useFetchIngressClassQuery({ clusters }, { skip: clusters.length === 0 });
 
   const [redeployService] = useRedeployServiceMutation();
   const [restartService] = useRestartServiceMutation();
@@ -175,6 +181,7 @@ export default function KnativeServiceDetails({
       <ServiceHeader
         serviceName={svc.metadata.name}
         namespace={svc.metadata.namespace ?? namespace}
+        cluster={cluster}
         ready={!!ready}
         acting={acting}
         onRedeploy={handleRedeploy}
@@ -205,7 +212,7 @@ export default function KnativeServiceDetails({
         namespace={namespace}
         serviceName={name}
         ingressClass={ingressClass}
-        ingressClassLoaded={ingressClassLoaded}
+        ingressClassLoaded={ingressClassSuccess}
       />
 
       <AutoscalingSettings

@@ -63,7 +63,11 @@ export default function KnativeServicesList() {
   const clusters = useClusters();
   const [nsFilter, setNsFilter] = React.useState<string>('all');
   const [detailOpen, setDetailOpen] = React.useState(false);
-  const [selected, setSelected] = React.useState<{ namespace: string; name: string } | null>(null);
+  const [selected, setSelected] = React.useState<{
+    namespace: string;
+    name: string;
+    cluster: string;
+  } | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [sortKey, setSortKey] = React.useState<SortKey>('name');
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
@@ -374,7 +378,7 @@ export default function KnativeServicesList() {
                       <Button
                         size="small"
                         onClick={() => {
-                          setSelected({ namespace: ns, name });
+                          setSelected({ namespace: ns, name, cluster: svc.cluster });
                           setDetailOpen(true);
                         }}
                       >
@@ -467,7 +471,11 @@ export default function KnativeServicesList() {
         <DialogTitle>Service Details</DialogTitle>
         <DialogContent dividers>
           {selected && (
-            <KnativeServiceDetails namespace={selected.namespace} name={selected.name} />
+            <KnativeServiceDetails
+              namespace={selected.namespace}
+              name={selected.name}
+              cluster={selected.cluster}
+            />
           )}
         </DialogContent>
         <DialogActions>
