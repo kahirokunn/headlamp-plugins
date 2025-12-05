@@ -1,6 +1,7 @@
 import React from 'react';
 import { listHttpRoutesByVisibilityForService } from '../../../api/envoy';
-import { fetchNetworkTemplates } from '../../../api/knative';
+import { useFetchNetworkTemplatesQuery } from '../../../api/knativeRtkApi';
+import { useClusters } from '../../../hooks/useClusters';
 import HttpRoutesSection from './HttpRoutesSection';
 import type { HTTPRoute } from '../../../api/envoy';
 
@@ -13,12 +14,19 @@ export default function GatewayApiIngressSection({
   namespace,
   serviceName,
 }: GatewayApiIngressSectionProps) {
+  const clusters = useClusters();
   const [externalHttpRoutes, setExternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
   const [internalHttpRoutes, setInternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
-  const [networkTemplates, setNetworkTemplates] = React.useState<{
-    domainTemplate: string;
-    tagTemplate: string;
-  } | null>(null);
+
+  const { data: networkTemplatesData, isLoading: networkTemplatesLoading } =
+    useFetchNetworkTemplatesQuery({ clusters }, { skip: clusters.length === 0 });
+
+  const networkTemplates = React.useMemo(() => {
+    if (!networkTemplatesData || networkTemplatesData.length === 0) return null;
+    // Use the first cluster's templates
+    const { cluster: _, ...templates } = networkTemplatesData[0];
+    return templates;
+  }, [networkTemplatesData]);
 
   const refetchRoutes = React.useCallback(async () => {
     try {
@@ -33,22 +41,6 @@ export default function GatewayApiIngressSection({
       setInternalHttpRoutes([]);
     }
   }, [namespace, serviceName]);
-
-  // Fetch network templates (domain-template, tag-template)
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const t = await fetchNetworkTemplates();
-        if (!cancelled) setNetworkTemplates(t);
-      } catch {
-        // ignore; keep null
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Initial fetch and polling for routes
   React.useEffect(() => {

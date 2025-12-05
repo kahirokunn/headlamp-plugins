@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Condition } from '../types/knative';
-import { getAge } from '../api/knative';
+import { getAge } from '../api/knativeRtkApi';
 
 type ConditionsSectionProps = {
   title?: string;

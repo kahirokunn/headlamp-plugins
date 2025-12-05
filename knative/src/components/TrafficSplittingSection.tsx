@@ -15,7 +15,8 @@ import {
   Typography,
 } from '@mui/material';
 import type { KnativeRevision, KnativeService, TrafficTarget } from '../types/knative';
-import { getAge, updateTraffic } from '../api/knative';
+import { getAge, useUpdateTrafficMutation } from '../api/knativeRtkApi';
+import { useClusters } from '../hooks/useClusters';
 import { useNotify } from './common/notifications/useNotify';
 
 type Props = {
@@ -33,11 +34,12 @@ export default function TrafficSplittingSection({
   revisions,
   onSaved,
 }: Props) {
+  const clusters = useClusters();
+  const [updateTraffic, { isLoading: savingTraffic }] = useUpdateTrafficMutation();
   const [revPercents, setRevPercents] = React.useState<Record<string, number>>({});
   const [revTags, setRevTags] = React.useState<Record<string, string[]>>({});
   const [latestPercent, setLatestPercent] = React.useState<number>(0);
   const [latestTags, setLatestTags] = React.useState<string[]>([]);
-  const [savingTraffic, setSavingTraffic] = React.useState(false);
   const { notifySuccess, notifyError } = useNotify();
   const revTagInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
   const latestTagInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -263,7 +265,19 @@ export default function TrafficSplittingSection({
         });
       });
 
-      await updateTraffic(namespace, name, traffic);
+      // Use the first cluster (or handle multiple clusters if needed)
+      const cluster = clusters[0];
+      if (!cluster) {
+        notifyError('No cluster available');
+        return;
+      }
+
+      const result = await updateTraffic({
+        cluster,
+        namespace,
+        name,
+        traffic,
+      }).unwrap();
 
       // 4) On success, sync UI state to merged values and clear inputs
       setRevTags(prev => {
@@ -282,11 +296,10 @@ export default function TrafficSplittingSection({
 
       notifySuccess('Traffic updated');
       onSaved?.();
-    } catch (err) {
-      const detail = (err as Error)?.message?.trim();
+    } catch (err: unknown) {
+      const error = err as { message?: string } | undefined;
+      const detail = error?.message?.trim();
       notifyError(detail ? `Failed to update traffic: ${detail}` : 'Failed to update traffic');
-    } finally {
-      setSavingTraffic(false);
     }
   }
 

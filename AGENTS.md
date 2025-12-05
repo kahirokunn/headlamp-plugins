@@ -61,25 +61,21 @@ type UserData = {
 type Data = any;
 ```
 
-- **API response validation**
-  - Use **`zod/mini`** for validating all API responses from `ApiProxy.request()`.
-  - **All `ApiProxy.request()` responses MUST be validated through a Zod schema** before use.
-    - Exception: for operations where the response body is **never used at all** (e.g. simple PATCH/DELETE helpers that only care about HTTP success), you may `await ApiProxy.request(...)` directly without Zod validation, but **you must not parse-and-discard the body using `z.unknown().parseAsync(...)`**.
-  - **All API response type definitions MUST be derived from Zod schemas** using `z.infer<typeof SchemaName>`.
-  - Do not use type assertions (`as`) directly on `ApiProxy.request()` responses; instead, parse and validate them with Zod schemas first.
-  - **Do not call `.parse()` / `.parseAsync()` on Zod schemas in plugin code. Always use `.safeParse()` (or `.safeParseAsync()` if available) and handle the result (`success` / `error`) explicitly.**
-  - **Schema design principle**: Define schemas based on the **actual structure of data returned from the API**, not necessarily the CRD definition. For example, even if a CRD defines `spec` as optional (for PATCH operations), if the API always returns it (due to mutating webhooks, defaults, etc.), make it required in the schema.
-  - **Important**: `zod/mini` keeps only a small set of methods (for example `.safeParse()` and `.check()`) and moves most validation helpers (like `.min()`, `.max()`, `.trim()`, etc.) to top‑level functions. In this repository, **prefer the functional API over method chaining**:
-    - For optional / nullable, prefer `z.nullable(z.optional(z.string()))` (Zod Mini style) instead of the regular-Zod style `z.string().optional().nullable()`.
-    - For checks like `min` / `max`, prefer `.check()` with functional checks, e.g. `z.string().check(z.minLength(5), z.maxLength(10))` instead of `z.string().min(5).max(10)`.
+- **API implementation with RTK Query**
+  - **All API calls MUST be implemented using RTK Query** (`@reduxjs/toolkit/query/react`). Do not use `ApiProxy.request()` directly in components or API helpers.
+  - Define all API endpoints in a centralized RTK Query API slice (e.g., `src/api/knativeRtkApi.ts`).
+  - Use `createApi` to create the API slice with appropriate `reducerPath` and `tagTypes`.
+  - Define endpoints using `build.query` for read operations and `build.mutation` for write operations.
+  - **All endpoints MUST support multi-cluster operations** by accepting `clusters: string[]` in their arguments.
+  - Inside `queryFn`, use `ApiProxy.clusterRequest()` for individual cluster requests (this is internal implementation detail).
   - Example:
 
 ```ts
-import * as z from 'zod/mini';
+import { createApi } from '@reduxjs/toolkit/query/react';
 import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
+import * as z from 'zod/mini';
 
 // Define schema based on actual API response structure
-// (note: zod/mini does not support method chaining)
 const ServiceSchema = z.object({
   apiVersion: z.string(),
   kind: z.string(),
@@ -87,62 +83,133 @@ const ServiceSchema = z.object({
     name: z.string(),
     namespace: z.optional(z.string()),
   }),
-  // spec is required here because the API always returns it
-  // (mutating webhooks, defaults, etc. ensure it exists)
   spec: z.object({
     template: z.object({ /* ... */ }),
-    // ... other spec fields
   }),
 });
 
-// Derive type from schema
 type Service = z.infer<typeof ServiceSchema>;
 
-// Generic Result type for API helpers
-type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+// Multi-cluster aware type
+type ServiceWithCluster = Service & { cluster: string };
 
-// Domain‑specific error type (define explicit variants instead of using `any`)
-type ServiceError =
-  | { kind: 'ValidationError'; message: string }
-  | { kind: 'ApiError'; message: string };
+// Arguments for multi-cluster queries
+type GetServiceArgs = {
+  clusters: string[];
+  namespace: string;
+  name: string;
+};
 
-// Validate response without throwing; use early returns on failure
-export async function getService(
-  namespace: string,
-  name: string
-): Promise<Result<Service, ServiceError>> {
-  let response: unknown;
-  try {
-    response = await ApiProxy.request(`/api/v1/namespaces/${namespace}/services/${name}`, {
-      method: 'GET',
-    });
-  } catch (e) {
-    const message = (e as Error)?.message || 'Failed to fetch Service';
-    return { ok: false, error: { kind: 'ApiError', message } };
-  }
+// Error type
+type ApiError = {
+  kind: 'ValidationError' | 'ApiError' | 'NotFound' | 'UnknownError';
+  message: string;
+};
 
-  const parsed = ServiceSchema.safeParse(response);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: { kind: 'ValidationError', message: 'Invalid Service response' },
-    };
-  }
+const emptyBaseQuery: BaseQueryFn<unknown, unknown, ApiError> = async () => ({
+  error: {
+    kind: 'UnknownError',
+    message: 'Base query is not used; endpoints use queryFn.',
+  },
+});
 
-  return { ok: true, value: parsed.data };
-}
+export const knativeRtkApi = createApi({
+  reducerPath: 'knativeRtkApi',
+  baseQuery: emptyBaseQuery, // Use empty base query; endpoints use queryFn
+  tagTypes: ['Service'],
+  endpoints: build => ({
+    getService: build.query<ServiceWithCluster[], GetServiceArgs>({
+      async queryFn({ clusters, namespace, name }) {
+        const results: ServiceWithCluster[] = [];
+
+        for (const cluster of clusters) {
+          try {
+            const response = await ApiProxy.clusterRequest(
+              `/apis/serving.knative.dev/v1/namespaces/${namespace}/services/${name}`,
+              { method: 'GET', cluster }
+            );
+            const parsed = ServiceSchema.safeParse(response);
+            if (!parsed.success) {
+              // Continue to next cluster on validation error
+              continue;
+            }
+            results.push({ ...parsed.data, cluster });
+          } catch (error) {
+            // Continue to next cluster on API error
+            continue;
+          }
+        }
+
+        return { data: results };
+      },
+      providesTags: (result) =>
+        result
+          ? result.map(service => ({
+              type: 'Service' as const,
+              id: `${service.cluster}/${service.metadata.namespace ?? ''}/${service.metadata.name}`,
+            }))
+          : [],
+    }),
+  }),
+});
+
+// Export hooks for use in components
+export const { useGetServiceQuery } = knativeRtkApi;
 ```
 
-- **Error handling for API wrappers**
-  - `ApiProxy.request()` throws `ApiError` for non‑OK HTTP responses, but **plugin-level API helpers must not use `throw` in their public surface to represent expected API or validation failures**.
-    - Instead, always convert outcomes into explicit, typed result objects using the generic `Result<T, E>` pattern above.
-    - Prefer defining **domain‑specific error types** (for example `ServiceError`, `DomainMappingError`, etc.) rather than using `string` or `any` for error values.
-    - Use **early return** style to keep success and failure paths simple and easy to follow.
-  - For operations that do not need the response body (e.g. simple PATCH/DELETE helpers), prefer **non-throwing wrappers** that:
-    - simply `await ApiProxy.request(...)` to ensure the HTTP call succeeds (do **not** call `z.unknown().parseAsync(...)` just to “consume” the response), and
-    - return an explicit `Result<void, E>` (for example `{ ok: true }` on success, `{ ok: false, error }` on failure) instead of throwing.
-  - UI/components should consume these helpers by checking `result.ok` (for example `if (!result.ok) { notifyError(result.error.message); }`) rather than relying on `try`/`catch` for expected API failures.
-  - **New plugin code should avoid introducing `throw` in application logic**; use `Result<T, E>` and explicit error values to represent all expected failure modes.
+- **API response validation**
+  - Use **`zod/mini`** for validating all API responses inside RTK Query `queryFn`.
+  - **All API responses MUST be validated through a Zod schema** before use.
+  - **All API response type definitions MUST be derived from Zod schemas** using `z.infer<typeof SchemaName>`.
+  - Do not use type assertions (`as`) directly on API responses; instead, parse and validate them with Zod schemas first.
+  - **Do not call `.parse()` / `.parseAsync()` on Zod schemas. Always use `.safeParse()` and handle the result (`success` / `error`) explicitly.**
+  - **Schema design principle**: Define schemas based on the **actual structure of data returned from the API**, not necessarily the CRD definition. For example, even if a CRD defines `spec` as optional (for PATCH operations), if the API always returns it (due to mutating webhooks, defaults, etc.), make it required in the schema.
+  - **Important**: `zod/mini` keeps only a small set of methods (for example `.safeParse()` and `.check()`) and moves most validation helpers (like `.min()`, `.max()`, `.trim()`, etc.) to top‑level functions. In this repository, **prefer the functional API over method chaining**:
+    - For optional / nullable, prefer `z.nullable(z.optional(z.string()))` (Zod Mini style) instead of the regular-Zod style `z.string().optional().nullable()`.
+    - For checks like `min` / `max`, prefer `.check()` with functional checks, e.g. `z.string().check(z.minLength(5), z.maxLength(10))` instead of `z.string().min(5).max(10)`.
+
+- **Error handling in RTK Query**
+  - RTK Query endpoints should return `{ data }` on success or `{ error }` on failure (RTK Query standard pattern).
+  - Define **domain‑specific error types** (for example `KnativeApiError` with variants like `'ValidationError' | 'ApiError' | 'NotFound' | 'UnknownError'`) rather than using `string` or `any`.
+  - In `queryFn`, catch errors and convert them to the error type using a helper function (e.g., `toApiError()`).
+  - For multi-cluster queries, handle errors per cluster gracefully (continue processing other clusters even if one fails).
+  - UI/components should consume RTK Query hooks and check `isError` or `error` properties rather than using `try`/`catch`.
+  - Example error handling:
+
+```ts
+import { ApiError } from '@kinvolk/headlamp-plugin/lib/ApiProxy';
+
+type KnativeApiError = {
+  kind: 'ValidationError' | 'ApiError' | 'NotFound' | 'UnknownError';
+  message: string;
+};
+
+function toApiError(error: unknown, fallbackMessage: string): KnativeApiError {
+  if (error instanceof ApiError) {
+    return { kind: 'ApiError', message: error.message || fallbackMessage };
+  }
+  if (error instanceof Error) {
+    return { kind: 'ApiError', message: error.message || fallbackMessage };
+  }
+  return { kind: 'UnknownError', message: fallbackMessage };
+}
+
+// In queryFn:
+async queryFn({ cluster, namespace, name }) {
+  try {
+    const response = await ApiProxy.clusterRequest(/* ... */);
+    const parsed = ServiceSchema.safeParse(response);
+    if (!parsed.success) {
+      return {
+        error: { kind: 'ValidationError', message: 'Invalid Service response' },
+      };
+    }
+    return { data: { ...parsed.data, cluster } };
+  } catch (error) {
+    return { error: toApiError(error, 'Failed to fetch Service') };
+  }
+}
+```
 
 - **Form implementation**
   - **All forms MUST be implemented using `react-hook-form` with `zod/mini` for validation.**
@@ -184,6 +251,36 @@ function CreateServiceForm() {
       {/* Form fields */}
     </form>
   );
+}
+```
+
+- **Multi-cluster support**
+  - **All views MUST be multi-cluster compatible.** Do not create single-cluster-only views.
+  - **Always use the `useClusters()` hook** from `src/hooks/useClusters.ts` to get cluster names. Do not use `getCluster()` directly in components or views.
+  - The `useClusters()` hook automatically handles:
+    - Selected clusters (if any are selected in the UI)
+    - Current cluster (if no clusters are selected)
+    - All available clusters (as a fallback)
+  - When making API calls that support multiple clusters, pass the cluster array returned by `useClusters()`.
+  - Example:
+
+```ts
+import { useClusters } from '../hooks/useClusters';
+
+export default function MyComponent() {
+  const clusters = useClusters();
+  const hasCluster = clusters.length > 0;
+
+  const { data, isLoading } = useFetchDataQuery(
+    { clusters },
+    { skip: !hasCluster }
+  );
+
+  if (!hasCluster) {
+    return <div>No cluster selected</div>;
+  }
+
+  // Render multi-cluster data...
 }
 ```
 
@@ -245,6 +342,7 @@ These rules are specifically for tools like GitHub Copilot, Cursor Agents, or ot
     - Component layout and prop naming
     - API calling conventions under `src/api`
     - Error handling and notification patterns (`useNotify` hooks, etc.)
+    - **Multi-cluster support**: Always use `useClusters()` hook instead of `getCluster()` for all views
 - **Safety and minimality**
   - Prefer the **smallest change** that achieves the requested behavior.
   - Do not introduce speculative refactors or unrelated style changes.

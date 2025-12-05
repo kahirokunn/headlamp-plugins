@@ -24,7 +24,13 @@ import {
   Typography,
 } from '@mui/material';
 import type { KnativeService } from '../types/knative';
-import { fetchIngressClass, getAge, listServices, listDomainMappings } from '../api/knative';
+import {
+  getAge,
+  useWatchKnativeServices,
+  useWatchDomainMappings,
+  useFetchIngressClassQuery,
+} from '../api/knativeRtkApi';
+import { useClusters } from '../hooks/useClusters';
 import { formatIngressClass } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
 import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
@@ -53,85 +59,74 @@ function trafficSummary(svc: KnativeService): string {
 }
 
 export default function KnativeServicesList() {
-  const [services, setServices] = React.useState<KnativeService[] | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const clusters = useClusters();
   const [nsFilter, setNsFilter] = React.useState<string>('all');
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<{ namespace: string; name: string } | null>(null);
-  const [domainByServiceKey, setDomainByServiceKey] = React.useState<Record<string, string[]>>({});
   const [createOpen, setCreateOpen] = React.useState(false);
   const [sortKey, setSortKey] = React.useState<SortKey>('name');
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
-  const [ingressClass, setIngressClass] = React.useState<string | null>(null);
-  const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
+
+  const {
+    data: servicesData,
+    error: servicesError,
+    isLoading: servicesLoading,
+  } = useWatchKnativeServices({ clusters });
+
+  const { data: domainMappingsData, error: domainMappingsError } = useWatchDomainMappings({
+    clusters,
+  });
+
+  const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery(
+    { clusters },
+    { skip: clusters.length === 0 }
+  );
+
+  const services = React.useMemo(() => {
+    if (!servicesData) return null;
+    // Remove cluster field for compatibility with existing code
+    return servicesData.map(({ cluster, ...svc }) => svc);
+  }, [servicesData]);
+
+  const domainByServiceKey = React.useMemo(() => {
+    const domainMap: Record<string, string[]> = {};
+    if (!domainMappingsData) return domainMap;
+    for (const dm of domainMappingsData) {
+      const refName = dm.spec?.ref?.name;
+      if (!refName) continue;
+      const svcNs = dm.spec?.ref?.namespace || dm.metadata?.namespace || 'default';
+      const key = `${svcNs}/${refName}`;
+      const isReady = dm.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
+      const url = dm.status?.url || dm.status?.address?.url;
+      if (isReady && url) {
+        if (!domainMap[key]) domainMap[key] = [];
+        if (!domainMap[key].includes(url)) domainMap[key].push(url);
+      }
+    }
+    return domainMap;
+  }, [domainMappingsData]);
+
+  const ingressClass = React.useMemo(() => {
+    if (!ingressClassData || ingressClassData.length === 0) return null;
+    // Use the first cluster's ingress class
+    return ingressClassData[0]?.ingressClass ?? null;
+  }, [ingressClassData]);
+
+  const error = React.useMemo(() => {
+    if (servicesError) {
+      return servicesError.message || 'Failed to load services';
+    }
+    if (domainMappingsError) {
+      return domainMappingsError.message || 'Failed to load domain mappings';
+    }
+    return null;
+  }, [servicesError, domainMappingsError]);
 
   const namespaces = React.useMemo(() => {
     const set = new Set<string>();
     services?.forEach(s => s.metadata.namespace && set.add(s.metadata.namespace));
     return Array.from(set).sort();
   }, [services]);
-
-  const fetchServices = React.useCallback(async () => {
-    try {
-      const [items, dms] = await Promise.all([listServices(), listDomainMappings()]);
-      const domainMap: Record<string, string[]> = {};
-      for (const dm of dms || []) {
-        const refName = dm.spec?.ref?.name;
-        if (!refName) continue;
-        const svcNs = dm.spec?.ref?.namespace || dm.metadata?.namespace || 'default';
-        const key = `${svcNs}/${refName}`;
-        const isReady = dm.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
-        const url = dm.status?.url || dm.status?.address?.url;
-        if (isReady && url) {
-          if (!domainMap[key]) domainMap[key] = [];
-          if (!domainMap[key].includes(url)) domainMap[key].push(url);
-        }
-      }
-      setServices(items);
-      setDomainByServiceKey(domainMap);
-      setError(null);
-    } catch (err) {
-      setError((err as Error)?.message || 'Failed to load services');
-    }
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const value = await fetchIngressClass();
-        if (!cancelled) {
-          setIngressClass(value);
-          setIngressClassLoaded(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setIngressClass(null);
-          setIngressClassLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    let mounted = true;
-    let intervalId: number | undefined;
-    const wrappedFetch = async () => {
-      if (!mounted) return;
-      await fetchServices();
-    };
-    wrappedFetch();
-    intervalId = window.setInterval(wrappedFetch, 10000);
-    return () => {
-      mounted = false;
-      if (intervalId) {
-        window.clearInterval(intervalId);
-      }
-    };
-  }, [fetchServices]);
 
   const filtered = React.useMemo(() => {
     if (!services) return [];
@@ -212,7 +207,7 @@ export default function KnativeServicesList() {
     );
   }
 
-  if (!services) {
+  if (servicesLoading || !services) {
     return (
       <Box p={4} display="flex" justifyContent="center" alignItems="center">
         <CircularProgress />
@@ -221,7 +216,7 @@ export default function KnativeServicesList() {
   }
 
   function displayIngressClass(): string {
-    if (!ingressClassLoaded) return '';
+    if (ingressClassLoading) return '';
     return formatIngressClass(ingressClass);
   }
 
@@ -252,7 +247,7 @@ export default function KnativeServicesList() {
         </Stack>
       </Box>
 
-      {ingressClassLoaded && (
+      {!ingressClassLoading && (
         <Typography variant="body2" color="text.secondary">
           Ingress class: {displayIngressClass()}
         </Typography>
@@ -467,7 +462,9 @@ export default function KnativeServicesList() {
       {createOpen && (
         <CreateKnativeServiceDialog
           onClose={() => setCreateOpen(false)}
-          onCreated={fetchServices}
+          onCreated={() => {
+            // RTK Query will automatically refetch via cache invalidation
+          }}
         />
       )}
     </Stack>

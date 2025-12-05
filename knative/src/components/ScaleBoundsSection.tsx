@@ -2,7 +2,8 @@ import React from 'react';
 import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material';
 import type { KnativeService } from '../types/knative';
 import { useNotify } from './common/notifications/useNotify';
-import { updateAutoscalingSettings } from '../api/knative';
+import { useUpdateAutoscalingSettingsMutation } from '../api/knativeRtkApi';
+import { useClusters } from '../hooks/useClusters';
 
 type AutoscalingDefaults = {
   concurrencyTarget: number;
@@ -32,6 +33,9 @@ export default function ScaleBoundsSection({
   defaults: AutoscalingDefaults | null;
   onSaved?: () => void;
 }) {
+  const clusters = useClusters();
+  const cluster = clusters[0] || '';
+  const [updateAutoscalingSettings, { isLoading: saving }] = useUpdateAutoscalingSettingsMutation();
   const anns = service?.spec?.template?.metadata?.annotations ?? {};
 
   const [minScale, setMinScale] = React.useState<string>(
@@ -52,7 +56,6 @@ export default function ScaleBoundsSection({
   const [stableWindow, setStableWindow] = React.useState<string>(
     anns['autoscaling.knative.dev/window'] ?? ''
   );
-  const [saving, setSaving] = React.useState(false);
 
   const { notifySuccess, notifyError } = useNotify();
 
@@ -80,24 +83,27 @@ export default function ScaleBoundsSection({
   }
 
   async function onSave() {
-    if (!isValid()) return;
-    setSaving(true);
+    if (!isValid() || !cluster) return;
     try {
-      await updateAutoscalingSettings(namespace, name, {
-        minScale: minScale === '' ? null : Number(minScale),
-        maxScale: maxScale === '' ? null : Number(maxScale),
-        initialScale: initialScale === '' ? null : Number(initialScale),
-        activationScale: activationScale === '' ? null : Number(activationScale),
-        scaleDownDelay: scaleDownDelay === '' ? null : scaleDownDelay,
-        stableWindow: stableWindow === '' ? null : stableWindow,
-      });
+      await updateAutoscalingSettings({
+        cluster,
+        namespace,
+        name,
+        params: {
+          minScale: minScale === '' ? null : Number(minScale),
+          maxScale: maxScale === '' ? null : Number(maxScale),
+          initialScale: initialScale === '' ? null : Number(initialScale),
+          activationScale: activationScale === '' ? null : Number(activationScale),
+          scaleDownDelay: scaleDownDelay === '' ? null : scaleDownDelay,
+          stableWindow: stableWindow === '' ? null : stableWindow,
+        },
+      }).unwrap();
       notifySuccess('Scale bounds updated');
       onSaved?.();
-    } catch (err) {
-      const detail = (err as Error)?.message?.trim();
+    } catch (err: unknown) {
+      const error = err as { message?: string } | undefined;
+      const detail = error?.message?.trim();
       notifyError(detail ? `Failed to update settings: ${detail}` : 'Failed to update settings');
-    } finally {
-      setSaving(false);
     }
   }
 

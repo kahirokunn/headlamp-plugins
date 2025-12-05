@@ -15,7 +15,12 @@ import {
   Typography,
   InputAdornment,
 } from '@mui/material';
-import { createSecret, createService, fetchIngressClass } from '../api/knative';
+import {
+  useCreateSecretMutation,
+  useCreateServiceMutation,
+  useFetchIngressClassQuery,
+} from '../api/knativeRtkApi';
+import { useClusters } from '../hooks/useClusters';
 import {
   createIpAccessSecurityPolicy,
   createSecurityPolicyForHTTPRoute,
@@ -68,6 +73,8 @@ const validateCidrs = (allow: string[], deny: string[]): string | null => {
 };
 
 export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props) {
+  const clusters = useClusters();
+  const cluster = clusters[0] || '';
   const [namespace, setNamespace] = React.useState<string>('');
   const [name, setName] = React.useState<string>('');
   const [image, setImage] = React.useState<string>('');
@@ -89,10 +96,20 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
   const [enableIpAccessControl, setEnableIpAccessControl] = React.useState(false);
   const [ipAllowCidrs, setIpAllowCidrs] = React.useState<string[]>(['']);
   const [ipDenyCidrs, setIpDenyCidrs] = React.useState<string[]>(['']);
-  const [ingressClass, setIngressClass] = React.useState<string | null>(null);
-  const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const { notifyError, notifyInfo } = useNotify();
+
+  const [createSecret] = useCreateSecretMutation();
+  const [createService] = useCreateServiceMutation();
+  const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery(
+    { clusters },
+    { skip: clusters.length === 0 }
+  );
+
+  const ingressClass = React.useMemo(() => {
+    if (!ingressClassData || ingressClassData.length === 0) return null;
+    return ingressClassData[0]?.ingressClass ?? null;
+  }, [ingressClassData]);
 
   React.useEffect(() => {
     if (isRequestGreaterThanLimit(cpuRequest, cpuLimit)) {
@@ -105,14 +122,6 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
       setMemoryLimit(memoryRequest);
     }
   }, [memoryRequest, memoryLimit]);
-
-  React.useEffect(() => {
-    (async () => {
-      const value = await fetchIngressClass();
-      setIngressClass(value);
-      setIngressClassLoaded(true);
-    })();
-  }, []);
 
   const handleAddEnvRow = () => {
     setEnvRows(prev => [...prev, { key: '', value: '', id: Math.random().toString(36).slice(2) }]);
@@ -221,6 +230,10 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
     const memLimTrimmed = memoryLimit.trim();
     const memoryRequestQuantity = memReqTrimmed ? `${memReqTrimmed}Gi` : null;
     const memoryLimitQuantity = memLimTrimmed ? `${memLimTrimmed}Gi` : null;
+    if (!cluster) {
+      notifyError('No cluster available');
+      return;
+    }
     setSubmitting(true);
     try {
       const envData: Record<string, string> = {};
@@ -230,10 +243,16 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
       let createdEnvSecretName: string | undefined;
       if (Object.keys(envData).length > 0) {
         const secretName = `${name}-env`;
-        await createSecret({ namespace, name: secretName, data: envData });
+        await createSecret({
+          cluster,
+          namespace,
+          name: secretName,
+          data: envData,
+        }).unwrap();
         createdEnvSecretName = secretName;
       }
       await createService({
+        cluster,
         namespace,
         name,
         image,
@@ -247,7 +266,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
         cpuLimit,
         memoryRequest: memoryRequestQuantity,
         memoryLimit: memoryLimitQuantity,
-      });
+      }).unwrap();
       notifyInfo('KService created');
 
       if (visibility === 'external' && (enableBasicAuth || enableIpAccessControl)) {
@@ -266,8 +285,9 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
 
       onCreated && onCreated();
       onClose();
-    } catch (e) {
-      notifyError((e as Error)?.message || 'Failed to create KService');
+    } catch (e: unknown) {
+      const error = e as { message?: string } | undefined;
+      notifyError(error?.message || 'Failed to create KService');
     } finally {
       setSubmitting(false);
     }
@@ -461,7 +481,7 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props
           {visibility === 'external' && (
             <IngressSecuritySection
               ingressClass={ingressClass}
-              ingressClassLoaded={ingressClassLoaded}
+              ingressClassLoaded={!ingressClassLoading}
               enableBasicAuth={enableBasicAuth}
               setEnableBasicAuth={setEnableBasicAuth}
               basicAuthUsername={basicAuthUsername}

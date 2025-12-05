@@ -2,13 +2,14 @@ import React from 'react';
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import type { KnativeRevision, KnativeService } from '../types/knative';
 import {
-  fetchAutoscalingGlobalDefaults,
-  fetchIngressClass,
-  getService,
-  listRevisions,
-  redeployService,
-  restartService,
-} from '../api/knative';
+  useGetServiceQuery,
+  useWatchKnativeRevisions,
+  useRedeployServiceMutation,
+  useRestartServiceMutation,
+  useFetchAutoscalingGlobalDefaultsQuery,
+  useFetchIngressClassQuery,
+} from '../api/knativeRtkApi';
+import { useClusters } from '../hooks/useClusters';
 import { useNotify } from './common/notifications/useNotify';
 import { useParams } from 'react-router-dom';
 import AutoscalingSettings from './AutoscalingSettings';
@@ -30,105 +31,90 @@ export default function KnativeServiceDetails({
   const params = useParams<{ namespace: string; name: string }>();
   const namespace = namespaceProp ?? params.namespace ?? '';
   const name = nameProp ?? params.name ?? '';
-  const [svc, setSvc] = React.useState<KnativeService | null>(null);
-  const [revs, setRevs] = React.useState<KnativeRevision[] | null>(null);
+  const clusters = useClusters();
+  const cluster = clusters[0] || '';
   const [acting, setActing] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
   const { notifyError, notifyInfo } = useNotify();
-  const [autoDefaults, setAutoDefaults] = React.useState<{
-    concurrencyTarget: number;
-    targetUtilizationPercentage: number;
-    rpsTarget: number;
-    containerConcurrency: number;
-    minScale: number;
-    maxScale: number;
-    maxScaleLimit?: number;
-    initialScale: number;
-    allowZeroInitialScale: boolean;
-    scaleDownDelay: string;
-    stableWindow: string;
-    activationScaleDefault: number;
-  } | null>(null);
-  const [ingressClass, setIngressClass] = React.useState<string | null>(null);
-  const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
 
-  const refetchServiceAndRevisions = React.useCallback(async () => {
-    try {
-      const [s, r] = await Promise.all([
-        getService(namespace, name),
-        listRevisions(namespace, name),
-      ]);
-      setSvc(s);
-      setRevs(r);
-    } catch (err) {
-      setError((err as Error)?.message || 'Failed to load resource');
+  const {
+    data: serviceData,
+    error: serviceError,
+    isLoading: serviceLoading,
+    refetch: refetchService,
+  } = useGetServiceQuery({ cluster, namespace, name }, { skip: !cluster || !namespace || !name });
+
+  const {
+    data: revisionsData,
+    error: revisionsError,
+    isLoading: revisionsLoading,
+  } = useWatchKnativeRevisions({
+    clusters,
+    namespace,
+    serviceName: name,
+  });
+
+  const { data: autoDefaultsData, isLoading: autoDefaultsLoading } =
+    useFetchAutoscalingGlobalDefaultsQuery({ clusters }, { skip: clusters.length === 0 });
+
+  const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery(
+    { clusters },
+    { skip: clusters.length === 0 }
+  );
+
+  const [redeployService] = useRedeployServiceMutation();
+  const [restartService] = useRestartServiceMutation();
+
+  const svc = React.useMemo(() => {
+    if (!serviceData) return null;
+    // Remove cluster field for compatibility
+    const { cluster: _, ...service } = serviceData;
+    return service;
+  }, [serviceData]);
+
+  const revs = React.useMemo(() => {
+    if (!revisionsData) return null;
+    // Remove cluster field for compatibility
+    return revisionsData.map(({ cluster: _, ...rev }) => rev);
+  }, [revisionsData]);
+
+  const autoDefaults = React.useMemo(() => {
+    if (!autoDefaultsData || autoDefaultsData.length === 0) return null;
+    // Use the first cluster's defaults
+    const { cluster: _, ...defaults } = autoDefaultsData[0];
+    return defaults;
+  }, [autoDefaultsData]);
+
+  const ingressClass = React.useMemo(() => {
+    if (!ingressClassData || ingressClassData.length === 0) return null;
+    // Use the first cluster's ingress class
+    return ingressClassData[0]?.ingressClass ?? null;
+  }, [ingressClassData]);
+
+  const error = React.useMemo(() => {
+    if (serviceError) {
+      return (serviceError as { message?: string })?.message || 'Failed to load service';
     }
-  }, [namespace, name]);
-
-  React.useEffect(() => {
-    refetchServiceAndRevisions();
-  }, [refetchServiceAndRevisions]);
-
-  // Fetch autoscaling defaults
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const d = await fetchAutoscalingGlobalDefaults();
-        if (!cancelled) setAutoDefaults(d);
-      } catch {
-        // ignore; keep null
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Fetch ingress.class from config-network to warn when Gateway API integration is not enabled.
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const value = await fetchIngressClass();
-        if (!cancelled) {
-          setIngressClass(value);
-          setIngressClassLoaded(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setIngressClass(null);
-          setIngressClassLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (revisionsError) {
+      return (revisionsError as { message?: string })?.message || 'Failed to load revisions';
+    }
+    return null;
+  }, [serviceError, revisionsError]);
 
   const ready = React.useMemo(
     () => svc?.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True',
     [svc]
   );
 
-  React.useEffect(() => {
-    if (!svc || ready) return;
-    const timer = window.setInterval(() => {
-      refetchServiceAndRevisions();
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [svc, ready, refetchServiceAndRevisions]);
-
   async function handleRedeploy() {
-    if (!svc) return;
+    if (!svc || !cluster) return;
     setActing('redeploy');
     try {
-      await redeployService(namespace, name);
+      await redeployService({ cluster, namespace, name }).unwrap();
       notifyInfo('Redeploy requested');
-      refetchServiceAndRevisions();
-    } catch (err) {
-      const detail = (err as Error)?.message?.trim();
+      refetchService();
+    } catch (err: unknown) {
+      const error = err as { message?: string } | undefined;
+      const detail = error?.message?.trim();
       notifyError(detail ? `Redeploy failed: ${detail}` : 'Redeploy failed');
     } finally {
       setActing(null);
@@ -136,13 +122,15 @@ export default function KnativeServiceDetails({
   }
 
   async function handleRestart() {
-    if (!svc) return;
+    if (!svc || !cluster) return;
     setActing('restart');
     try {
-      await restartService(namespace, svc);
+      await restartService({ cluster, namespace, service: svc }).unwrap();
       notifyInfo('Restart requested');
-    } catch (err) {
-      const detail = (err as Error)?.message?.trim();
+      refetchService();
+    } catch (err: unknown) {
+      const error = err as { message?: string } | undefined;
+      const detail = error?.message?.trim();
       notifyError(detail ? `Restart failed: ${detail}` : 'Restart failed');
     } finally {
       setActing(null);
@@ -157,7 +145,7 @@ export default function KnativeServiceDetails({
     );
   }
 
-  if (!svc || !revs) {
+  if (serviceLoading || revisionsLoading || !svc || !revs) {
     return (
       <Box p={4} display="flex" justifyContent="center" alignItems="center">
         <CircularProgress />
@@ -165,10 +153,11 @@ export default function KnativeServiceDetails({
     );
   }
 
-  const shouldShowIngressWarning = ingressClassLoaded && ingressClass !== INGRESS_CLASS_GATEWAY_API;
+  const shouldShowIngressWarning =
+    !ingressClassLoading && ingressClass !== INGRESS_CLASS_GATEWAY_API;
 
   function displayIngressClass(): string {
-    if (!ingressClassLoaded) return '';
+    if (ingressClassLoading) return '';
     return formatIngressClass(ingressClass);
   }
 
@@ -192,7 +181,7 @@ export default function KnativeServiceDetails({
         onRestart={handleRestart}
       />
 
-      {ingressClassLoaded && (
+      {!ingressClassLoading && (
         <Typography variant="body2" color="text.secondary">
           Ingress class: {displayIngressClass()}
         </Typography>
@@ -205,7 +194,9 @@ export default function KnativeServiceDetails({
         name={name}
         service={svc}
         revisions={revs}
-        onSaved={refetchServiceAndRevisions}
+        onSaved={() => {
+          refetchService();
+        }}
       />
 
       <DomainMappingSection namespace={namespace} serviceName={name} />
@@ -222,7 +213,9 @@ export default function KnativeServiceDetails({
         name={name}
         service={svc}
         defaults={autoDefaults}
-        onSaved={refetchServiceAndRevisions}
+        onSaved={() => {
+          refetchService();
+        }}
       />
 
       <ScaleBoundsSection
@@ -230,7 +223,9 @@ export default function KnativeServiceDetails({
         name={name}
         service={svc}
         defaults={autoDefaults}
-        onSaved={refetchServiceAndRevisions}
+        onSaved={() => {
+          refetchService();
+        }}
       />
     </Stack>
   );
