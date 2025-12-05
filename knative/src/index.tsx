@@ -15,10 +15,17 @@
  */
 
 import { addIcon } from '@iconify/react';
+import type { ReactNode } from 'react';
+import { Provider } from 'react-redux';
 import { registerRoute, registerSidebarEntry } from '@kinvolk/headlamp-plugin/lib';
+import { knativeStore } from './store';
 import KnativeServicesList from './components/KnativeServicesList';
 import KnativeServiceDetails from './components/KnativeServiceDetails';
 import KnativeNetworkingOverview from './components/KnativeNetworkingOverview';
+
+function KnativeStoreProvider({ children }: { children: ReactNode }) {
+  return <Provider store={knativeStore}>{children}</Provider>;
+}
 
 addIcon('custom:knative', {
   body: `<svg viewBox="0 0 735 593.5" xmlns="http://www.w3.org/2000/svg">
@@ -58,33 +65,53 @@ registerRoute({
   path: '/knative/services',
   sidebar: 'kservices',
   name: 'kservices',
-  component: () => <KnativeServicesList />,
+  component: () => (
+    <KnativeStoreProvider>
+      <KnativeServicesList />
+    </KnativeStoreProvider>
+  ),
 });
 
 registerRoute({
   path: '/knative/networking',
   sidebar: 'knetworking',
   name: 'knetworking',
-  component: () => <KnativeNetworkingOverview />,
+  component: () => (
+    <KnativeStoreProvider>
+      <KnativeNetworkingOverview />
+    </KnativeStoreProvider>
+  ),
 });
 
 registerRoute({
   path: '/knative/services/:namespace/:name',
   sidebar: 'kservices',
   name: 'knative-service',
-  component: () => <KnativeServiceDetails />,
+  component: () => (
+    <KnativeStoreProvider>
+      <KnativeServiceDetails />
+    </KnativeStoreProvider>
+  ),
 });
 
 registerRoute({
   path: '/knative/services/:namespace/:name/revisions',
   sidebar: 'kservices',
   name: 'knative-service-revisions',
-  component: () => <KnativeServiceDetails />,
+  component: () => (
+    <KnativeStoreProvider>
+      <KnativeServiceDetails />
+    </KnativeStoreProvider>
+  ),
 });
 
 registerRoute({
   path: '/knative/services/:namespace/:name/traffic',
   sidebar: 'kservices',
   name: 'knative-service-traffic',
-  component: () => <KnativeServiceDetails />,
+  component: () => (
+    <KnativeStoreProvider>
+      <KnativeServiceDetails />
+    </KnativeStoreProvider>
+  ),
 });

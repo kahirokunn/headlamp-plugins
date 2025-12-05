@@ -1,7 +1,8 @@
-import React from 'react';
 import { Box, CircularProgress, Paper, Typography } from '@mui/material';
-import { fetchGatewayConfig, fetchIngressClass, GatewayConfigResult } from '../api/knative';
+import type { GatewayConfigResult } from '../api/knativeRtkApi';
+import { useFetchGatewayConfigQuery, useFetchIngressClassQuery } from '../api/knativeRtkApi';
 import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
+import { useClusters } from '../hooks/useClusters';
 
 function GatewaySection({
   label,
@@ -47,55 +48,32 @@ function GatewaySection({
 }
 
 export default function KnativeNetworkingOverview() {
-  const [ingressClass, setIngressClass] = React.useState<string | null>(null);
-  const [ingressClassLoaded, setIngressClassLoaded] = React.useState(false);
-  const [gatewayConfig, setGatewayConfig] = React.useState<GatewayConfigResult | null>(null);
-  const [gatewayLoaded, setGatewayLoaded] = React.useState(false);
+  const clusters = useClusters();
+  const hasCluster = clusters.length > 0;
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const value = await fetchIngressClass();
-        if (!cancelled) {
-          setIngressClass(value);
-          setIngressClassLoaded(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setIngressClass(null);
-          setIngressClassLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    data: ingressResults,
+    isLoading: ingressLoading,
+    isUninitialized: ingressUninitialized,
+  } = useFetchIngressClassQuery({ clusters }, { skip: !hasCluster });
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const config = await fetchGatewayConfig();
-        if (!cancelled) {
-          setGatewayConfig(config);
-          setGatewayLoaded(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setGatewayConfig({ external: null, local: null });
-          setGatewayLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    data: gatewayResults,
+    isLoading: gatewayLoading,
+    isUninitialized: gatewayUninitialized,
+  } = useFetchGatewayConfigQuery({ clusters }, { skip: !hasCluster });
 
-  const loading = !ingressClassLoaded || !gatewayLoaded;
-  const isGatewayApi = ingressClass === INGRESS_CLASS_GATEWAY_API;
+  if (!hasCluster) {
+    return (
+      <Box sx={{ p: 4, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <Typography color="text.secondary">
+          No cluster selected. Select a cluster to view Knative networking details.
+        </Typography>
+      </Box>
+    );
+  }
+
+  const loading = ingressLoading || gatewayLoading || ingressUninitialized || gatewayUninitialized;
 
   if (loading) {
     return (
@@ -104,6 +82,14 @@ export default function KnativeNetworkingOverview() {
       </Box>
     );
   }
+
+  const ingressResult = ingressResults?.[0];
+  const gatewayResult = gatewayResults?.[0];
+  const ingressClass = ingressResult?.ingressClass ?? null;
+  const gatewayConfig: GatewayConfigResult | null = gatewayResult
+    ? { external: gatewayResult.external, local: gatewayResult.local }
+    : null;
+  const isGatewayApi = ingressClass === INGRESS_CLASS_GATEWAY_API;
 
   return (
     <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
