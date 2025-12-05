@@ -20,7 +20,6 @@ import { Provider } from 'react-redux';
 import { registerRoute, registerSidebarEntry } from '@kinvolk/headlamp-plugin/lib';
 import { knativeStore } from './store';
 import KnativeServicesList from './components/KnativeServicesList';
-import KnativeServiceDetails from './components/KnativeServiceDetails';
 import KnativeNetworkingOverview from './components/KnativeNetworkingOverview';
 
 function KnativeStoreProvider({ children }: { children: ReactNode }) {
@@ -79,39 +78,6 @@ registerRoute({
   component: () => (
     <KnativeStoreProvider>
       <KnativeNetworkingOverview />
-    </KnativeStoreProvider>
-  ),
-});
-
-registerRoute({
-  path: '/knative/services/:namespace/:name',
-  sidebar: 'kservices',
-  name: 'knative-service',
-  component: () => (
-    <KnativeStoreProvider>
-      <KnativeServiceDetails />
-    </KnativeStoreProvider>
-  ),
-});
-
-registerRoute({
-  path: '/knative/services/:namespace/:name/revisions',
-  sidebar: 'kservices',
-  name: 'knative-service-revisions',
-  component: () => (
-    <KnativeStoreProvider>
-      <KnativeServiceDetails />
-    </KnativeStoreProvider>
-  ),
-});
-
-registerRoute({
-  path: '/knative/services/:namespace/:name/traffic',
-  sidebar: 'kservices',
-  name: 'knative-service-traffic',
-  component: () => (
-    <KnativeStoreProvider>
-      <KnativeServiceDetails />
     </KnativeStoreProvider>
   ),
 });
