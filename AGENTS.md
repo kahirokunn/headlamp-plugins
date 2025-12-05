@@ -262,6 +262,9 @@ function CreateServiceForm() {
     - Current cluster (if no clusters are selected)
     - All available clusters (as a fallback)
   - When making API calls that support multiple clusters, pass the cluster array returned by `useClusters()`.
+  - For **resource list views** (tables showing K8s/Knative resources), always include a **`Cluster` column** whose value is the resource's origin cluster.
+    - The `Cluster` column should only be **rendered when there are two or more clusters** (e.g. `const showClusterColumn = clusters.length > 1` and conditionally render the header and cells).
+    - Sorting by `Cluster` should be supported when the column is present.
   - Example:
 
 ```ts

@@ -23,13 +23,13 @@ import {
   TableSortLabel,
   Typography,
 } from '@mui/material';
-import type { KnativeService } from '../types/knative';
 import {
   getAge,
   useWatchKnativeServices,
   useWatchDomainMappings,
   useFetchIngressClassQuery,
 } from '../api/knativeRtkApi';
+import type { KnativeServiceWithCluster } from '../api/knativeRtkApi';
 import { useClusters } from '../hooks/useClusters';
 import { formatIngressClass } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
@@ -38,6 +38,7 @@ import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
 type SortKey =
   | 'name'
   | 'namespace'
+  | 'cluster'
   | 'visibility'
   | 'url'
   | 'latestRevision'
@@ -45,7 +46,7 @@ type SortKey =
   | 'tags'
   | 'age';
 
-function trafficSummary(svc: KnativeService): string {
+function trafficSummary(svc: KnativeServiceWithCluster): string {
   const tr = svc.spec?.traffic || [];
   // Don't display 0% traffic
   const nonZero = tr.filter(t => (t.percent ?? 0) > 0);
@@ -82,10 +83,11 @@ export default function KnativeServicesList() {
     { skip: clusters.length === 0 }
   );
 
+  const showClusterColumn = clusters.length > 1;
+
   const services = React.useMemo(() => {
     if (!servicesData) return null;
-    // Remove cluster field for compatibility with existing code
-    return servicesData.map(({ cluster, ...svc }) => svc);
+    return servicesData;
   }, [servicesData]);
 
   const domainByServiceKey = React.useMemo(() => {
@@ -95,7 +97,7 @@ export default function KnativeServicesList() {
       const refName = dm.spec?.ref?.name;
       if (!refName) continue;
       const svcNs = dm.spec?.ref?.namespace || dm.metadata?.namespace || 'default';
-      const key = `${svcNs}/${refName}`;
+      const key = `${dm.cluster}/${svcNs}/${refName}`;
       const isReady = dm.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
       const url = dm.status?.url || dm.status?.address?.url;
       if (isReady && url) {
@@ -133,15 +135,17 @@ export default function KnativeServicesList() {
     return services.filter(s => nsFilter === 'all' || s.metadata.namespace === nsFilter);
   }, [services, nsFilter]);
 
-  function getSortValue(svc: KnativeService, key: SortKey): string {
+  function getSortValue(svc: KnativeServiceWithCluster, key: SortKey): string {
     const ns = svc.metadata.namespace || 'default';
     const name = svc.metadata.name;
-    const serviceKey = `${ns}/${name}`;
+    const serviceKey = `${svc.cluster}/${ns}/${name}`;
     switch (key) {
       case 'name':
         return name.toLowerCase();
       case 'namespace':
         return ns.toLowerCase();
+      case 'cluster':
+        return svc.cluster.toLowerCase();
       case 'visibility': {
         const visibilityLabel =
           svc.metadata?.labels?.['networking.knative.dev/visibility'] === 'cluster-local'
@@ -275,6 +279,17 @@ export default function KnativeServicesList() {
                   Namespace
                 </TableSortLabel>
               </TableCell>
+              {showClusterColumn && (
+                <TableCell sortDirection={sortKey === 'cluster' ? sortDir : false}>
+                  <TableSortLabel
+                    active={sortKey === 'cluster'}
+                    direction={sortKey === 'cluster' ? sortDir : 'asc'}
+                    onClick={() => handleSort('cluster')}
+                  >
+                    Cluster
+                  </TableSortLabel>
+                </TableCell>
+              )}
               <TableCell sortDirection={sortKey === 'visibility' ? sortDir : false}>
                 <TableSortLabel
                   active={sortKey === 'visibility'}
@@ -353,7 +368,7 @@ export default function KnativeServicesList() {
                   ? 'Internal'
                   : 'External';
               return (
-                <TableRow key={`${ns}/${name}`} hover>
+                <TableRow key={`${svc.cluster}/${ns}/${name}`} hover>
                   <TableCell>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                       <Button
@@ -368,6 +383,7 @@ export default function KnativeServicesList() {
                     </Stack>
                   </TableCell>
                   <TableCell>{ns}</TableCell>
+                  {showClusterColumn && <TableCell>{svc.cluster}</TableCell>}
                   <TableCell>
                     <Chip
                       label={visibilityLabel}
@@ -376,14 +392,14 @@ export default function KnativeServicesList() {
                     />
                   </TableCell>
                   <TableCell>
-                    {domainByServiceKey[`${ns}/${name}`] &&
-                    domainByServiceKey[`${ns}/${name}`].length > 0 ? (
+                    {domainByServiceKey[`${svc.cluster}/${ns}/${name}`] &&
+                    domainByServiceKey[`${svc.cluster}/${ns}/${name}`].length > 0 ? (
                       <Stack
                         direction="row"
                         spacing={1}
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                       >
-                        {domainByServiceKey[`${ns}/${name}`].map(u => (
+                        {domainByServiceKey[`${svc.cluster}/${ns}/${name}`].map(u => (
                           <a key={u} href={u} target="_blank" rel="noreferrer">
                             {u}
                           </a>
