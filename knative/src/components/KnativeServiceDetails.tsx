@@ -7,7 +7,7 @@ import {
   useFetchAutoscalingGlobalDefaultsQuery,
   useFetchIngressClassQuery,
   KnativeServiceWithCluster,
-} from '../api/knativeRtkApi';
+} from '../api/knative';
 import type { KnativeRevision } from '../types/knative';
 import { useNotify } from './common/notifications/useNotify';
 import AutoscalingSettings from './AutoscalingSettings';

@@ -28,8 +28,8 @@ import {
   useWatchKnativeServices,
   useWatchDomainMappings,
   useFetchIngressClassQuery,
-} from '../api/knativeRtkApi';
-import type { KnativeServiceWithCluster } from '../api/knativeRtkApi';
+} from '../api/knative';
+import type { KnativeServiceWithCluster } from '../api/knative';
 import { useClusters } from '../hooks/useClusters';
 import { formatIngressClass, INGRESS_CLASS_GATEWAY_API } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';

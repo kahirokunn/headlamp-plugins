@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { KnativeRevision, KnativeService, TrafficTarget } from '../types/knative';
-import { getAge, useUpdateTrafficMutation } from '../api/knativeRtkApi';
+import { getAge, useUpdateTrafficMutation } from '../api/knative';
 import { useNotify } from './common/notifications/useNotify';
 
 type Props = {

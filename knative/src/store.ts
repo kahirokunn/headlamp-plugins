@@ -1,6 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { setupListeners } from '@reduxjs/toolkit/query';
-import { knativeRtkApi } from './api/knativeRtkApi';
+import { knativeRtkApi } from './api/knative';
 
 export const knativeStore = configureStore({
   reducer: {
@@ -8,8 +8,4 @@ export const knativeStore = configureStore({
   },
   middleware: getDefaultMiddleware => getDefaultMiddleware().concat(knativeRtkApi.middleware),
 });
-
-type KnativeRootState = ReturnType<typeof knativeStore.getState>;
-type KnativeAppDispatch = typeof knativeStore.dispatch;
-
 setupListeners(knativeStore.dispatch);

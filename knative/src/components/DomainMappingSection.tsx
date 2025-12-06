@@ -7,7 +7,7 @@ import {
   useDeleteDomainMappingMutation,
   useCreateClusterDomainClaimMutation,
   useAnnotateDomainMappingMutation,
-} from '../api/knativeRtkApi';
+} from '../api/knative';
 import { useNotify } from './common/notifications/useNotify';
 
 type Props = {

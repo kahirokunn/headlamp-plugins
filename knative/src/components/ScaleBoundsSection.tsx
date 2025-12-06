@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material';
 import type { KnativeService } from '../types/knative';
 import { useNotify } from './common/notifications/useNotify';
-import { useUpdateAutoscalingSettingsMutation } from '../api/knativeRtkApi';
+import { useUpdateAutoscalingSettingsMutation } from '../api/knative';
 
 type AutoscalingDefaults = {
   concurrencyTarget: number;

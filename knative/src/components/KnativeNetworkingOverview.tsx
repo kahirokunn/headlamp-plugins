@@ -1,6 +1,6 @@
 import { Box, CircularProgress, Paper, Typography } from '@mui/material';
-import type { GatewayConfigResult } from '../api/knativeRtkApi';
-import { useFetchGatewayConfigQuery, useFetchIngressClassQuery } from '../api/knativeRtkApi';
+import type { GatewayConfigResult } from '../api/knative';
+import { useFetchGatewayConfigQuery, useFetchIngressClassQuery } from '../api/knative';
 import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 import { useClusters } from '../hooks/useClusters';
 

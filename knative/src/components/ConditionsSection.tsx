@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Condition } from '../types/knative';
-import { getAge } from '../api/knativeRtkApi';
+import { getAge } from '../api/knative';
 
 type ConditionsSectionProps = {
   conditions: Condition[];

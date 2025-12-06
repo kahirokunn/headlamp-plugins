@@ -15,7 +15,7 @@ import {
   Typography,
   InputAdornment,
 } from '@mui/material';
-import { useCreateSecretMutation, useCreateServiceMutation } from '../api/knativeRtkApi';
+import { useCreateSecretMutation, useCreateServiceMutation } from '../api/knative';
 import { useNotify } from './common/notifications/useNotify';
 
 type Props = {
