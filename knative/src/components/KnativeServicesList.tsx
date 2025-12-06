@@ -97,9 +97,9 @@ export default function KnativeServicesList() {
     const domainMap: Record<string, string[]> = {};
     if (!domainMappingsData) return domainMap;
     for (const dm of domainMappingsData) {
-      const refName = dm.spec?.ref?.name;
+      const refName = dm.spec.ref.name;
       if (!refName) continue;
-      const svcNs = dm.spec?.ref?.namespace || dm.metadata?.namespace || 'default';
+      const svcNs = dm.spec.ref.namespace || dm.metadata.namespace!;
       const key = `${dm.cluster}/${svcNs}/${refName}`;
       const isReady = dm.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
       const url = dm.status?.url || dm.status?.address?.url;
@@ -167,7 +167,7 @@ export default function KnativeServicesList() {
   }, [services, nsFilter]);
 
   function getSortValue(svc: KnativeServiceWithCluster, key: SortKey): string {
-    const ns = svc.metadata.namespace || 'default';
+    const ns = svc.metadata.namespace!;
     const name = svc.metadata.name;
     const serviceKey = `${svc.cluster}/${ns}/${name}`;
     switch (key) {
@@ -179,14 +179,14 @@ export default function KnativeServicesList() {
         return svc.cluster.toLowerCase();
       case 'visibility': {
         const visibilityLabel =
-          svc.metadata?.labels?.['networking.knative.dev/visibility'] === 'cluster-local'
+          svc.metadata.labels?.['networking.knative.dev/visibility'] === 'cluster-local'
             ? 'internal'
             : 'external';
         return visibilityLabel;
       }
       case 'url': {
         const urls = domainByServiceKey[serviceKey];
-        const primaryUrl = (urls && urls[0]) || svc.status?.url || '';
+        const primaryUrl = urls?.[0] || svc.status?.url || '';
         return primaryUrl.toLowerCase();
       }
       case 'latestRevision': {
