@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/index.tsx"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "ignore": [
+    "**/*.d.ts",
+    "src/**/__tests__/**",
+    "src/**/*.test.*",
+    "src/**/*.spec.*",
+    "src/**/*.stories.*"
+  ],
+  "ignoreDependencies": [
+    "react",
+    "react-redux",
+    "@mui/material",
+    "@iconify/react",
+    "notistack",
+    "js-yaml"
+  ]
+}

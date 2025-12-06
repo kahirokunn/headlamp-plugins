@@ -2,6 +2,8 @@
   "extends": "./node_modules/@kinvolk/headlamp-plugin/config/plugins-tsconfig.json",
   "include": ["./src/**/*"],
   "compilerOptions": {
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "moduleResolution": "bundler",
     "module": "ESNext",
     "resolvePackageJsonExports": true,
