@@ -683,10 +683,4 @@ const envoyRtkApi = knativeRtkApi.injectEndpoints({
   overrideExisting: false,
 });
 
-export const {
-  useUpsertBasicAuthSecretMutation,
-  useCreateSecurityPolicyForHTTPRouteMutation,
-  useCreateIpAccessSecurityPolicyMutation,
-  useListHttpRoutesByVisibilityForServiceQuery,
-  useWaitForServiceHttpRouteMutation,
-} = envoyRtkApi;
+export const { useListHttpRoutesByVisibilityForServiceQuery } = envoyRtkApi;

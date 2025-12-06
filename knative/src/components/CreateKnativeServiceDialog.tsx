@@ -15,19 +15,8 @@ import {
   Typography,
   InputAdornment,
 } from '@mui/material';
-import {
-  useCreateSecretMutation,
-  useCreateServiceMutation,
-  useFetchIngressClassQuery,
-} from '../api/knativeRtkApi';
-import {
-  useCreateIpAccessSecurityPolicyMutation,
-  useCreateSecurityPolicyForHTTPRouteMutation,
-  useUpsertBasicAuthSecretMutation,
-  useWaitForServiceHttpRouteMutation,
-} from '../api/envoy';
+import { useCreateSecretMutation, useCreateServiceMutation } from '../api/knativeRtkApi';
 import { useNotify } from './common/notifications/useNotify';
-import IngressSecuritySection from './IngressSecuritySection';
 
 type Props = {
   onClose: () => void;
@@ -53,26 +42,7 @@ const isRequestGreaterThanLimit = (request: string, limit: string): boolean => {
   return req > lim;
 };
 
-const sanitizeList = (list: string[]): string[] => list.map(s => s.trim()).filter(Boolean);
-
-const isValidCIDR = (value: string): boolean => {
-  const ipv4 =
-    /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}\/([0-9]|[12]\d|3[0-2])$/;
-  const ipv6 = /^[0-9a-fA-F:]+\/(12[0-8]|1[01]\d|\d{1,2})$/;
-  return ipv4.test(value) || ipv6.test(value);
-};
-
-const validateCidrs = (allow: string[], deny: string[]): string | null => {
-  for (const v of [...sanitizeList(allow), ...sanitizeList(deny)]) {
-    if (!isValidCIDR(v)) {
-      return `Invalid CIDR format: ${v}`;
-    }
-  }
-  return null;
-};
-
 export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) {
-  const clusters = [cluster];
   const [namespace, setNamespace] = React.useState<string>('');
   const [name, setName] = React.useState<string>('');
   const [image, setImage] = React.useState<string>('');
@@ -88,30 +58,11 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
   const [envRows, setEnvRows] = React.useState<EnvRow[]>([
     { key: '', value: '', id: Math.random().toString(36).slice(2) },
   ]);
-  const [enableBasicAuth, setEnableBasicAuth] = React.useState(false);
-  const [basicAuthUsername, setBasicAuthUsername] = React.useState('');
-  const [basicAuthPassword, setBasicAuthPassword] = React.useState('');
-  const [enableIpAccessControl, setEnableIpAccessControl] = React.useState(false);
-  const [ipAllowCidrs, setIpAllowCidrs] = React.useState<string[]>(['']);
-  const [ipDenyCidrs, setIpDenyCidrs] = React.useState<string[]>(['']);
   const [submitting, setSubmitting] = React.useState(false);
   const { notifyError, notifyInfo } = useNotify();
 
   const [createSecret] = useCreateSecretMutation();
   const [createService] = useCreateServiceMutation();
-  const [upsertBasicAuthSecret] = useUpsertBasicAuthSecretMutation();
-  const [createSecurityPolicyForHTTPRoute] = useCreateSecurityPolicyForHTTPRouteMutation();
-  const [createIpAccessSecurityPolicy] = useCreateIpAccessSecurityPolicyMutation();
-  const [waitForServiceHttpRoute] = useWaitForServiceHttpRouteMutation();
-  const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery(
-    { clusters },
-    { skip: clusters.length === 0 }
-  );
-
-  const ingressClass = React.useMemo(() => {
-    if (!ingressClassData || ingressClassData.length === 0) return null;
-    return ingressClassData[0]?.ingressClass ?? null;
-  }, [ingressClassData]);
 
   React.useEffect(() => {
     if (isRequestGreaterThanLimit(cpuRequest, cpuLimit)) {
@@ -137,76 +88,6 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
     setEnvRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
   };
 
-  const handleChangeAllowCidr = (index: number, value: string) => {
-    setIpAllowCidrs(prev => prev.map((v, i) => (i === index ? value : v)));
-  };
-
-  const handleAddAllowCidrRow = () => {
-    setIpAllowCidrs(prev => [...prev, '']);
-  };
-
-  const handleRemoveAllowCidr = (index: number) => {
-    setIpAllowCidrs(prev => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
-  };
-
-  const handleChangeDenyCidr = (index: number, value: string) => {
-    setIpDenyCidrs(prev => prev.map((v, i) => (i === index ? value : v)));
-  };
-
-  const handleAddDenyCidrRow = () => {
-    setIpDenyCidrs(prev => [...prev, '']);
-  };
-
-  const handleRemoveDenyCidr = (index: number) => {
-    setIpDenyCidrs(prev => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
-  };
-
-  async function configureSecurityForService(serviceNamespace: string, serviceName: string) {
-    if (!enableBasicAuth && !enableIpAccessControl) return;
-
-    const route = await waitForServiceHttpRoute({
-      cluster,
-      namespace: serviceNamespace,
-      serviceName,
-    }).unwrap();
-    if (!route) {
-      throw new Error('Timed out while waiting for HTTPRoute of the new service');
-    }
-    const httpRouteName = route.metadata.name;
-    const basicAuthSecretName = `${serviceName}-basic-auth`;
-
-    if (enableBasicAuth) {
-      await upsertBasicAuthSecret({
-        cluster,
-        namespace: serviceNamespace,
-        name: basicAuthSecretName.trim(),
-        username: basicAuthUsername.trim(),
-        password: basicAuthPassword,
-        ownerHttpRouteName: httpRouteName,
-      }).unwrap();
-      await createSecurityPolicyForHTTPRoute({
-        cluster,
-        namespace: serviceNamespace,
-        policyName: httpRouteName,
-        httpRouteName,
-        secretName: basicAuthSecretName.trim(),
-      }).unwrap();
-    }
-
-    if (enableIpAccessControl) {
-      const allow = sanitizeList(ipAllowCidrs);
-      const deny = sanitizeList(ipDenyCidrs);
-      await createIpAccessSecurityPolicy({
-        cluster,
-        namespace: serviceNamespace,
-        policyName: httpRouteName,
-        httpRouteName,
-        allowCidrs: allow,
-        denyCidrs: deny,
-      }).unwrap();
-    }
-  }
-
   const handleSubmit = async () => {
     if (!namespace || !name || !image || !port) {
       notifyError('namespace, name, image, port are required');
@@ -221,19 +102,6 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
     if (!Number.isFinite(minScaleNum) || minScaleNum < 0) {
       notifyError('minScale must be a non-negative number');
       return;
-    }
-    if (visibility === 'external' && enableBasicAuth) {
-      if (!basicAuthUsername.trim() || !basicAuthPassword) {
-        notifyError('Basic Auth: username and password are required');
-        return;
-      }
-    }
-    if (visibility === 'external' && enableIpAccessControl) {
-      const err = validateCidrs(ipAllowCidrs, ipDenyCidrs);
-      if (err) {
-        notifyError(err);
-        return;
-      }
     }
     const memReqTrimmed = memoryRequest.trim();
     const memLimTrimmed = memoryLimit.trim();
@@ -277,21 +145,6 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
         memoryLimit: memoryLimitQuantity,
       }).unwrap();
       notifyInfo('KService created');
-
-      if (visibility === 'external' && (enableBasicAuth || enableIpAccessControl)) {
-        try {
-          await configureSecurityForService(namespace, name);
-          notifyInfo('Security settings applied via Envoy Gateway');
-        } catch (e) {
-          const detail = (e as Error)?.message?.trim();
-          notifyError(
-            detail
-              ? `KService created but failed to configure security: ${detail}`
-              : 'KService created but failed to configure security'
-          );
-        }
-      }
-
       onClose();
     } catch (e: unknown) {
       const error = e as { message?: string } | undefined;
@@ -486,28 +339,6 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
               ))}
             </Stack>
           </Box>
-          {visibility === 'external' && (
-            <IngressSecuritySection
-              ingressClass={ingressClass}
-              ingressClassLoaded={!ingressClassLoading}
-              enableBasicAuth={enableBasicAuth}
-              setEnableBasicAuth={setEnableBasicAuth}
-              basicAuthUsername={basicAuthUsername}
-              setBasicAuthUsername={setBasicAuthUsername}
-              basicAuthPassword={basicAuthPassword}
-              setBasicAuthPassword={setBasicAuthPassword}
-              enableIpAccessControl={enableIpAccessControl}
-              setEnableIpAccessControl={setEnableIpAccessControl}
-              ipAllowCidrs={ipAllowCidrs}
-              handleChangeAllowCidr={handleChangeAllowCidr}
-              handleAddAllowCidrRow={handleAddAllowCidrRow}
-              handleRemoveAllowCidr={handleRemoveAllowCidr}
-              ipDenyCidrs={ipDenyCidrs}
-              handleChangeDenyCidr={handleChangeDenyCidr}
-              handleAddDenyCidrRow={handleAddDenyCidrRow}
-              handleRemoveDenyCidr={handleRemoveDenyCidr}
-            />
-          )}
         </Stack>
       </DialogContent>
       <DialogActions>
