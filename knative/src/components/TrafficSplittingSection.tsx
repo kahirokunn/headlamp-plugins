@@ -267,7 +267,7 @@ export default function TrafficSplittingSection({
         return;
       }
 
-      const result = await updateTraffic({
+      await updateTraffic({
         cluster,
         namespace,
         name,

@@ -36,7 +36,7 @@ export default function ConditionsSection({ conditions }: ConditionsSectionProps
               </TableRow>
             </TableHead>
             <TableBody>
-              {conditions.map((c, i) => (
+              {conditions.map(c => (
                 <TableRow key={c.type}>
                   <TableCell>{c.type}</TableCell>
                   <TableCell>

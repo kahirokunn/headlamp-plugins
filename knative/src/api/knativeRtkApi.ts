@@ -56,8 +56,6 @@ const KubernetesResourceMetadataSchema = z.catchall(
   z.unknown()
 );
 
-type KubernetesResourceMetadata = z.infer<typeof KubernetesResourceMetadataSchema>;
-
 const KubernetesResourceSchema = z.catchall(
   z.object({
     metadata: KubernetesResourceMetadataSchema,
@@ -123,8 +121,6 @@ type SafeParseResult<T> = { success: true; data: T } | { success: false };
 type SafeParseSchema<T> = {
   safeParse: (input: unknown) => SafeParseResult<T>;
 };
-
-type ListSchema<TItem> = SafeParseSchema<{ items?: TItem[] }>;
 
 type ParseAndMapResult<TResult> =
   | { ok: true; value: TResult[] }
@@ -470,8 +466,6 @@ const GatewayClassSchema = z.object({
     controllerName: z.string(),
   }),
 });
-
-type GatewayClass = z.infer<typeof GatewayClassSchema>;
 
 async function getGatewayClassControllerName(
   cluster: string,
@@ -1290,17 +1284,6 @@ type WatchResourcesQueryResult = ReturnType<typeof useWatchResourcesQuery>;
 
 type WatchKnativeResult<TResult> = Omit<WatchResourcesQueryResult, 'data' | 'error'> & {
   data?: TResult[];
-  error?: KnativeApiError;
-};
-
-type WatchKnativeServiceArgs = {
-  clusters: string[];
-  namespace: string;
-  name: string;
-};
-
-type WatchKnativeServiceResult = Omit<WatchResourcesQueryResult, 'data' | 'error'> & {
-  data?: KnativeServiceWithCluster;
   error?: KnativeApiError;
 };
 

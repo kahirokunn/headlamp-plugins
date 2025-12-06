@@ -1,4 +1,3 @@
-import React from 'react';
 import { Alert, Box, Typography } from '@mui/material';
 import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 import GatewayApiIngressSecuritySection from './ingress/gateway-api/GatewayApiIngressSecuritySection';

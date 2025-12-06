@@ -49,10 +49,6 @@ const AuthorizationPrincipalSchema = z.object({
   clientCIDRs: z.optional(z.array(z.string())),
 });
 
-type AuthorizationPrincipal = z.infer<typeof AuthorizationPrincipalSchema>;
-
-type AuthorizationRuleAction = 'Allow' | 'Deny';
-
 const AuthorizationRuleSchema = z.object({
   name: z.optional(z.string()),
   principal: z.optional(AuthorizationPrincipalSchema),

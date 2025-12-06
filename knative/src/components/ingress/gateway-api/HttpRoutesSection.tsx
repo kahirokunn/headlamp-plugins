@@ -1,4 +1,3 @@
-import React from 'react';
 import { Chip, Paper, Stack, Typography } from '@mui/material';
 import type { HTTPRoute } from '../../../api/envoy';
 import { Link as HeadlampLink } from '@kinvolk/headlamp-plugin/lib/CommonComponents';

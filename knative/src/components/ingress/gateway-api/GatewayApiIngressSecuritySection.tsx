@@ -1,4 +1,3 @@
-import React from 'react';
 import { Box, Button, FormControlLabel, Stack, Switch, TextField, Typography } from '@mui/material';
 import { formatIngressClass } from '../../../config/ingress';
 
