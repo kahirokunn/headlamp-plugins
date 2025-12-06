@@ -50,7 +50,7 @@ export default function AutoscalingSettings({
 }: AutoscalingSettingsProps) {
   const [updateAutoscalingSettings, { isLoading: saving }] = useUpdateAutoscalingSettingsMutation();
   const anns = kservice.spec.template?.metadata?.annotations ?? {};
-  const templateSpec = kservice.spec.template?.spec ?? {};
+  const templateSpec = kservice.spec.template?.spec;
 
   const [metric, setMetric] = React.useState<MetricType>(
     (anns['autoscaling.knative.dev/metric'] as MetricType) || ''
@@ -60,7 +60,7 @@ export default function AutoscalingSettings({
     anns['autoscaling.knative.dev/target-utilization-percentage'] ?? ''
   );
   const [hard, setHard] = React.useState<string>(
-    templateSpec?.hasOwnProperty('containerConcurrency') && templateSpec.containerConcurrency
+    typeof templateSpec?.containerConcurrency === 'number'
       ? String(templateSpec.containerConcurrency)
       : ''
   );
@@ -69,12 +69,13 @@ export default function AutoscalingSettings({
 
   function resetSection() {
     const a = kservice.spec.template?.metadata?.annotations ?? {};
-    const s = (kservice.spec.template?.spec as Record<string, unknown>) ?? {};
     setMetric((a['autoscaling.knative.dev/metric'] as MetricType) || '');
-    setTarget(a['autoscaling.knative.dev/target'] ?? '');
-    setUtil(a['autoscaling.knative.dev/target-utilization-percentage'] ?? '');
+    setTarget(a['autoscaling.knative.dev/target'] || '');
+    setUtil(a['autoscaling.knative.dev/target-utilization-percentage'] || '');
     setHard(
-      s?.hasOwnProperty('containerConcurrency') ? String((s as any).containerConcurrency ?? '') : ''
+      typeof templateSpec?.containerConcurrency === 'number'
+        ? String(templateSpec.containerConcurrency)
+        : ''
     );
   }
 

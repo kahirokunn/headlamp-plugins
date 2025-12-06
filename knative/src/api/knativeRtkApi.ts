@@ -39,6 +39,10 @@ type ClusterScopedResource = {
 };
 
 export type KnativeServiceWithCluster = KnativeService & ClusterScopedResource;
+
+// Revision spec type used by KService template.spec and Revision.spec
+type KnativeRevisionSpec = NonNullable<NonNullable<KnativeService['spec']['template']>['spec']>;
+
 type KnativeRevisionWithCluster = KnativeRevision & ClusterScopedResource;
 type DomainMappingWithCluster = DomainMapping & ClusterScopedResource;
 type ClusterDomainClaimWithCluster = ClusterDomainClaim & ClusterScopedResource;
@@ -677,7 +681,7 @@ export const knativeRtkApi = createApi({
           ...(resources ? { resources } : {}),
         };
 
-        const templateSpec: Record<string, unknown> = {
+        const templateSpec: KnativeRevisionSpec = {
           containers: [container],
           ...(imagePullSecretName ? { imagePullSecrets: [{ name: imagePullSecretName }] } : {}),
         };
