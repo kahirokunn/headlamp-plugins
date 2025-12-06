@@ -8,6 +8,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import type { Condition } from '../types/knative';
@@ -50,15 +51,27 @@ export default function ConditionsSection({ conditions }: ConditionsSectionProps
                   </TableCell>
                   <TableCell>{c.reason || '-'}</TableCell>
                   <TableCell>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      noWrap
-                      sx={{ maxWidth: 400 }}
-                      title={c.message || '-'}
-                    >
-                      {c.message || '-'}
-                    </Typography>
+                    {c.message ? (
+                      <Tooltip title={c.message}>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          noWrap
+                          sx={{ maxWidth: 400 }}
+                        >
+                          {c.message}
+                        </Typography>
+                      </Tooltip>
+                    ) : (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        noWrap
+                        sx={{ maxWidth: 400 }}
+                      >
+                        -
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>{c.lastTransitionTime ? getAge(c.lastTransitionTime) : '-'}</TableCell>
                 </TableRow>
