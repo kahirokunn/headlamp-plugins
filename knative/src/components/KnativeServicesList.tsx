@@ -31,7 +31,7 @@ import {
 } from '../api/knativeRtkApi';
 import type { KnativeServiceWithCluster } from '../api/knativeRtkApi';
 import { useClusters } from '../hooks/useClusters';
-import { formatIngressClass } from '../config/ingress';
+import { formatIngressClass, INGRESS_CLASS_GATEWAY_API } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
 import CreateKnativeServiceDialogWithClusterSelector from './CreateKnativeServiceDialogWithClusterSelector';
 
@@ -82,10 +82,9 @@ export default function KnativeServicesList() {
     clusters,
   });
 
-  const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery(
-    { clusters },
-    { skip: clusters.length === 0 }
-  );
+  const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery({
+    clusters,
+  });
 
   const showClusterColumn = clusters.length > 1;
 
@@ -112,10 +111,38 @@ export default function KnativeServicesList() {
     return domainMap;
   }, [domainMappingsData]);
 
-  const ingressClass = React.useMemo(() => {
-    if (!ingressClassData || ingressClassData.length === 0) return null;
-    // Use the first cluster's ingress class
-    return ingressClassData[0]?.ingressClass ?? null;
+  const ingressClasses = React.useMemo(
+    () =>
+      ingressClassData?.map(({ cluster, ingressClass }) => {
+        const formatted = formatIngressClass(ingressClass);
+        const isGatewayApi = ingressClass === INGRESS_CLASS_GATEWAY_API;
+        const isSet = ingressClass != null;
+
+        const color: 'default' | 'success' | 'warning' = isGatewayApi
+          ? 'success'
+          : isSet
+          ? 'default'
+          : 'warning';
+
+        const variant: 'filled' | 'outlined' = isSet ? 'filled' : 'outlined';
+
+        const label = clusters.length > 1 ? `${cluster}: ${formatted}` : formatted;
+
+        return {
+          key: cluster,
+          label,
+          color,
+          variant,
+        };
+      }) || [],
+    [ingressClassData, clusters]
+  );
+
+  const ingressClassLabel = React.useMemo(() => {
+    if (!ingressClassData || ingressClassData.length <= 1) {
+      return 'Ingress class';
+    }
+    return 'Ingress classes';
   }, [ingressClassData]);
 
   const error = React.useMemo(() => {
@@ -223,11 +250,6 @@ export default function KnativeServicesList() {
     );
   }
 
-  function displayIngressClass(): string {
-    if (ingressClassLoading) return '';
-    return formatIngressClass(ingressClass);
-  }
-
   const selectedKservice = servicesData?.find(
     s =>
       selected &&
@@ -268,9 +290,26 @@ export default function KnativeServicesList() {
       </Box>
 
       {!ingressClassLoading && (
-        <Typography variant="body2" color="text.secondary">
-          Ingress class: {displayIngressClass()}
-        </Typography>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary">
+            {ingressClassLabel}:
+          </Typography>
+          {ingressClasses.length > 0 ? (
+            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+              {ingressClasses.map(item => (
+                <Chip
+                  key={item.key}
+                  label={item.label}
+                  size="small"
+                  color={item.color}
+                  variant={item.variant}
+                />
+              ))}
+            </Stack>
+          ) : (
+            <Chip label={formatIngressClass(null)} size="small" variant="outlined" />
+          )}
+        </Stack>
       )}
 
       <TableContainer component={Paper} variant="outlined">
