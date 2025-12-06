@@ -239,11 +239,6 @@ type CreateClusterDomainClaimArgs = {
   namespace: string;
 };
 
-type GetClusterDomainClaimArgs = {
-  cluster: string;
-  domain: string;
-};
-
 type DeleteDomainMappingArgs = {
   cluster: string;
   namespace: string;
@@ -511,7 +506,6 @@ const emptyBaseQuery: KnativeBaseQueryFn = async () => ({
 export const knativeRtkApi = createApi({
   reducerPath: 'knativeRtkApi',
   baseQuery: emptyBaseQuery,
-  tagTypes: ['KnativeRevision', 'DomainMapping', 'ClusterDomainClaim', 'Config'],
   endpoints: build => ({
     watchResources: build.query<KubernetesResourceEntityState, WatchResourcesArgs>({
       async queryFn() {
@@ -763,7 +757,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to create DomainMapping') };
         }
       },
-      invalidatesTags: [{ type: 'DomainMapping', id: 'LIST' }],
     }),
 
     createClusterDomainClaim: build.mutation<
@@ -798,43 +791,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to create ClusterDomainClaim') };
         }
       },
-      invalidatesTags: [{ type: 'ClusterDomainClaim', id: 'LIST' }],
-    }),
-
-    getClusterDomainClaim: build.query<
-      ClusterDomainClaimWithCluster | null,
-      GetClusterDomainClaimArgs
-    >({
-      async queryFn({ cluster, domain }) {
-        try {
-          const response = await ApiProxy.clusterRequest(
-            `${KN_CLUSTER_DOMAIN_CLAIM_BASE}/clusterdomainclaims/${domain}`,
-            {
-              method: 'GET',
-              cluster,
-            }
-          );
-          const parsed = ClusterDomainClaimSchema.safeParse(response);
-          if (!parsed.success) {
-            return { data: null };
-          }
-          return { data: parsed.data ? { ...parsed.data, cluster } : null };
-        } catch (error) {
-          if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
-            return { data: null };
-          }
-          return { error: toApiError(error, 'Failed to fetch ClusterDomainClaim') };
-        }
-      },
-      providesTags: result =>
-        result
-          ? [
-              {
-                type: 'ClusterDomainClaim' as const,
-                id: `${result.cluster}/${result.metadata.name}`,
-              },
-            ]
-          : [],
     }),
 
     deleteDomainMapping: build.mutation<void, DeleteDomainMappingArgs>({
@@ -849,7 +805,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to delete DomainMapping') };
         }
       },
-      invalidatesTags: [{ type: 'DomainMapping', id: 'LIST' }],
     }),
 
     annotateDomainMapping: build.mutation<DomainMappingWithCluster, AnnotateDomainMappingArgs>({
@@ -880,7 +835,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to annotate DomainMapping') };
         }
       },
-      invalidatesTags: [{ type: 'DomainMapping', id: 'LIST' }],
     }),
 
     redeployService: build.mutation<void, RedeployServiceArgs>({
@@ -1164,11 +1118,6 @@ export const knativeRtkApi = createApi({
 
         return { data: results };
       },
-      providesTags: (_result, _error, { clusters }) =>
-        clusters.map(cluster => ({
-          type: 'Config' as const,
-          id: `${cluster}/autoscaling-defaults`,
-        })),
     }),
 
     fetchNetworkTemplates: build.query<NetworkTemplatesWithCluster[], FetchNetworkTemplatesArgs>({
@@ -1203,8 +1152,6 @@ export const knativeRtkApi = createApi({
 
         return { data: results };
       },
-      providesTags: (_result, _error, { clusters }) =>
-        clusters.map(cluster => ({ type: 'Config' as const, id: `${cluster}/network-templates` })),
     }),
 
     fetchIngressClass: build.query<IngressClassWithCluster[], FetchIngressClassArgs>({
@@ -1236,8 +1183,6 @@ export const knativeRtkApi = createApi({
 
         return { data: results };
       },
-      providesTags: (_result, _error, { clusters }) =>
-        clusters.map(cluster => ({ type: 'Config' as const, id: `${cluster}/ingress-class` })),
     }),
 
     fetchGatewayConfig: build.query<GatewayConfigResultWithCluster[], FetchGatewayConfigArgs>({
@@ -1298,8 +1243,6 @@ export const knativeRtkApi = createApi({
 
         return { data: results };
       },
-      providesTags: (_result, _error, { clusters }) =>
-        clusters.map(cluster => ({ type: 'Config' as const, id: `${cluster}/gateway-config` })),
     }),
   }),
 });
@@ -1310,7 +1253,6 @@ export const {
   useCreateServiceMutation,
   useCreateDomainMappingMutation,
   useCreateClusterDomainClaimMutation,
-  useGetClusterDomainClaimQuery,
   useDeleteDomainMappingMutation,
   useAnnotateDomainMappingMutation,
   useRedeployServiceMutation,
