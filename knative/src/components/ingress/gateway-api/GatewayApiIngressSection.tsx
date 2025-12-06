@@ -1,8 +1,8 @@
 import React from 'react';
-import { useListHttpRoutesByVisibilityForServiceQuery } from '../../../api/envoy';
+import { useListHttpRoutesByVisibilityForServiceQuery } from '../../../api/ingress/gateway-api/envoy';
 import { useFetchNetworkTemplatesQuery } from '../../../api/knative';
 import HttpRoutesSection from './HttpRoutesSection';
-import type { HTTPRoute } from '../../../api/envoy';
+import type { HTTPRoute } from '../../../api/ingress/gateway-api/envoy';
 
 type GatewayApiIngressSectionProps = {
   namespace: string;

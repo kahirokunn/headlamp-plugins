@@ -1,6 +1,6 @@
 import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
 import * as z from 'zod/mini';
-import { knativeRtkApi, toApiError } from './knative';
+import { knativeRtkApi, toApiError } from '../../knative';
 
 const ObjectMetaSchema = z.object({
   name: z.string(),
