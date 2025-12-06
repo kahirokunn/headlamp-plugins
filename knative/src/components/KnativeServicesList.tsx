@@ -33,7 +33,7 @@ import type { KnativeServiceWithCluster } from '../api/knativeRtkApi';
 import { useClusters } from '../hooks/useClusters';
 import { formatIngressClass } from '../config/ingress';
 import KnativeServiceDetails from './KnativeServiceDetails';
-import CreateKnativeServiceDialog from './CreateKnativeServiceDialog';
+import CreateKnativeServiceDialogWithClusterSelector from './CreateKnativeServiceDialogWithClusterSelector';
 
 type SortKey =
   | 'name'
@@ -249,7 +249,11 @@ export default function KnativeServicesList() {
               ))}
             </Select>
           </FormControl>
-          <Button variant="contained" onClick={() => setCreateOpen(true)}>
+          <Button
+            variant="contained"
+            onClick={() => setCreateOpen(true)}
+            disabled={clusters.length === 0}
+          >
             Create Service
           </Button>
         </Stack>
@@ -468,7 +472,7 @@ export default function KnativeServicesList() {
       </TableContainer>
 
       <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth maxWidth="lg">
-        <DialogTitle>Service Details</DialogTitle>
+        <DialogTitle>KService Details</DialogTitle>
         <DialogContent dividers>
           {selected && (
             <KnativeServiceDetails
@@ -484,12 +488,9 @@ export default function KnativeServicesList() {
       </Dialog>
 
       {createOpen && (
-        <CreateKnativeServiceDialog
+        <CreateKnativeServiceDialogWithClusterSelector
+          clusters={clusters}
           onClose={() => setCreateOpen(false)}
-          onCreated={() => {
-            // RTK Query will automatically refetch via cache invalidation
-          }}
-          cluster={clusters[0] || ''}
         />
       )}
     </Stack>

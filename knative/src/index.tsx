@@ -49,7 +49,7 @@ registerSidebarEntry({
 registerSidebarEntry({
   parent: 'knative',
   name: 'kservices',
-  label: 'Services',
+  label: 'KServices',
   url: '/knative/services',
 });
 

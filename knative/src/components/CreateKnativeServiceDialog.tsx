@@ -31,7 +31,6 @@ import IngressSecuritySection from './IngressSecuritySection';
 
 type Props = {
   onClose: () => void;
-  onCreated?: () => void;
   cluster: string;
 };
 
@@ -72,7 +71,7 @@ const validateCidrs = (allow: string[], deny: string[]): string | null => {
   return null;
 };
 
-export default function CreateKnativeServiceDialog({ onClose, onCreated, cluster }: Props) {
+export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) {
   const clusters = [cluster];
   const [namespace, setNamespace] = React.useState<string>('');
   const [name, setName] = React.useState<string>('');
@@ -282,7 +281,6 @@ export default function CreateKnativeServiceDialog({ onClose, onCreated, cluster
         }
       }
 
-      onCreated && onCreated();
       onClose();
     } catch (e: unknown) {
       const error = e as { message?: string } | undefined;

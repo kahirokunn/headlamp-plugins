@@ -40,6 +40,9 @@ This document describes how to work with this repository, both for **human contr
   - Keep components small and composable; extract shared logic into `components/common` or `src/api` as appropriate.
   - Respect the **DRY (Don't Repeat Yourself)** and **YAGNI (You Aren't Gonna Need It)** principles: avoid duplicating logic or structures, extract shared behavior into reusable functions, hooks, components, or utility modules, and avoid adding features or abstractions before there is a clear, concrete need.
   - For React performance and compatibility with React Compiler, **do not use** `useCallback` or `useMemo` in new or updated code; prefer plain functions and components and rely on the compiler's optimizations instead.
+- **Knative terminology**
+  - In the `knative` plugin, always refer to Knative Service resources as **"KService"** in component names, variable and type names, comments, and user-facing strings.
+  - Reserve the plain term **"Service"** for generic usage or for the Kubernetes `Service` resource; when you need to be explicit, prefer **"Kubernetes Service"** versus **"KService"** to avoid confusion.
 - **Type usage**
   - Prefer concrete, specific types and avoid `any` in new code.
   - Prefer leveraging TypeScript's type inference for local variables and obvious return types to keep code concise; use explicit annotations mainly for public APIs (exported functions, components, hooks, and modules) and when inference is unclear.
