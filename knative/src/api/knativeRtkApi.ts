@@ -28,7 +28,7 @@ const KnativeApiErrorSchema = z.object({
   message: z.string(),
 });
 
-export type KnativeApiError = z.infer<typeof KnativeApiErrorSchema>;
+type KnativeApiError = z.infer<typeof KnativeApiErrorSchema>;
 
 const UnknownErrorSchema = z.object({
   message: z.optional(z.string()),
@@ -39,9 +39,9 @@ type ClusterScopedResource = {
 };
 
 export type KnativeServiceWithCluster = KnativeService & ClusterScopedResource;
-export type KnativeRevisionWithCluster = KnativeRevision & ClusterScopedResource;
-export type DomainMappingWithCluster = DomainMapping & ClusterScopedResource;
-export type ClusterDomainClaimWithCluster = ClusterDomainClaim & ClusterScopedResource;
+type KnativeRevisionWithCluster = KnativeRevision & ClusterScopedResource;
+type DomainMappingWithCluster = DomainMapping & ClusterScopedResource;
+type ClusterDomainClaimWithCluster = ClusterDomainClaim & ClusterScopedResource;
 
 const KubernetesResourceMetadataSchema = z.catchall(
   z.object({
@@ -61,11 +61,11 @@ const KubernetesResourceSchema = z.catchall(
   z.unknown()
 );
 
-export type KubernetesResource = z.infer<typeof KubernetesResourceSchema>;
+type KubernetesResource = z.infer<typeof KubernetesResourceSchema>;
 
-export type KubernetesResourceWithCluster = KubernetesResource & ClusterScopedResource;
+type KubernetesResourceWithCluster = KubernetesResource & ClusterScopedResource;
 
-export type KubernetesResourceEntityState = EntityState<KubernetesResourceWithCluster, string>;
+type KubernetesResourceEntityState = EntityState<KubernetesResourceWithCluster, string>;
 
 const kubernetesResourceAdapter = createEntityAdapter<KubernetesResourceWithCluster, string>({
   selectId: resource =>
@@ -74,7 +74,7 @@ const kubernetesResourceAdapter = createEntityAdapter<KubernetesResourceWithClus
 
 const kubernetesResourceSelectors = kubernetesResourceAdapter.getSelectors();
 
-export type WatchResourcesArgs = {
+type WatchResourcesArgs = {
   clusters: string[];
   group: string;
   version: string;
@@ -349,17 +349,16 @@ type AutoscalingGlobalDefaults = {
   activationScaleDefault: number;
 };
 
-export type AutoscalingGlobalDefaultsWithCluster = AutoscalingGlobalDefaults &
-  ClusterScopedResource;
+type AutoscalingGlobalDefaultsWithCluster = AutoscalingGlobalDefaults & ClusterScopedResource;
 
 type NetworkTemplates = {
   domainTemplate: string;
   tagTemplate: string;
 };
 
-export type NetworkTemplatesWithCluster = NetworkTemplates & ClusterScopedResource;
+type NetworkTemplatesWithCluster = NetworkTemplates & ClusterScopedResource;
 
-export type IngressClassWithCluster = {
+type IngressClassWithCluster = {
   cluster: string;
   ingressClass: string | null;
 };
@@ -460,7 +459,7 @@ export type GatewayConfigResult = {
   local: GatewayConfig | null;
 };
 
-export type GatewayConfigResultWithCluster = GatewayConfigResult & ClusterScopedResource;
+type GatewayConfigResultWithCluster = GatewayConfigResult & ClusterScopedResource;
 
 const GatewayClassSchema = z.object({
   spec: z.object({
@@ -1271,7 +1270,7 @@ export const {
  * are returned as flattened arrays where each item includes a `cluster` field
  * indicating its origin cluster.
  */
-export type WatchKnativeResourceArgs = {
+type WatchKnativeResourceArgs = {
   clusters: string[];
   namespace?: string;
   labelSelector?: string;
@@ -1290,13 +1289,13 @@ type WatchKnativeResult<TResult> = Omit<WatchResourcesQueryResult, 'data' | 'err
   error?: KnativeApiError;
 };
 
-export type WatchKnativeServiceArgs = {
+type WatchKnativeServiceArgs = {
   clusters: string[];
   namespace: string;
   name: string;
 };
 
-export type WatchKnativeServiceResult = Omit<WatchResourcesQueryResult, 'data' | 'error'> & {
+type WatchKnativeServiceResult = Omit<WatchResourcesQueryResult, 'data' | 'error'> & {
   data?: KnativeServiceWithCluster;
   error?: KnativeApiError;
 };

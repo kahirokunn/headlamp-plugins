@@ -24,7 +24,7 @@ const HTTPRouteSpecSchema = z.object({
   rules: z.optional(z.array(HTTPRouteRuleSchema)),
 });
 
-export const HTTPRouteSchema = z.object({
+const HTTPRouteSchema = z.object({
   apiVersion: z.optional(z.string()),
   kind: z.optional(z.string()),
   metadata: ObjectMetaSchema,

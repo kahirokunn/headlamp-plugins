@@ -9,7 +9,7 @@ export const knativeStore = configureStore({
   middleware: getDefaultMiddleware => getDefaultMiddleware().concat(knativeRtkApi.middleware),
 });
 
-export type KnativeRootState = ReturnType<typeof knativeStore.getState>;
-export type KnativeAppDispatch = typeof knativeStore.dispatch;
+type KnativeRootState = ReturnType<typeof knativeStore.getState>;
+type KnativeAppDispatch = typeof knativeStore.dispatch;
 
 setupListeners(knativeStore.dispatch);

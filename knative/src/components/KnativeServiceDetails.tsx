@@ -19,7 +19,7 @@ import DomainMappingSection from './DomainMappingSection';
 import IngressIntegrationsSection from './IngressIntegrationsSection';
 import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 
-export type KnativeServiceDetailsProps = {
+type KnativeServiceDetailsProps = {
   namespace: string;
   name: string;
   cluster: string;

@@ -26,7 +26,13 @@ type Props = {
   revisions: KnativeRevision[];
 };
 
-export default function TrafficSplittingSection({ cluster, namespace, name, service, revisions }: Props) {
+export default function TrafficSplittingSection({
+  cluster,
+  namespace,
+  name,
+  service,
+  revisions,
+}: Props) {
   const [updateTraffic, { isLoading: savingTraffic }] = useUpdateTrafficMutation();
   const [revPercents, setRevPercents] = React.useState<Record<string, number>>({});
   const [revTags, setRevTags] = React.useState<Record<string, string[]>>({});
