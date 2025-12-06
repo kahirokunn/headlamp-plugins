@@ -228,6 +228,14 @@ export default function KnativeServicesList() {
     return formatIngressClass(ingressClass);
   }
 
+  const selectedKservice = servicesData?.find(
+    s =>
+      selected &&
+      s.cluster === selected.cluster &&
+      s.metadata.namespace === selected.namespace &&
+      s.metadata.name === selected.name
+  );
+
   return (
     <Stack spacing={2} sx={{ p: 2 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -474,13 +482,7 @@ export default function KnativeServicesList() {
       <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth maxWidth="lg">
         <DialogTitle>KService Details</DialogTitle>
         <DialogContent dividers>
-          {selected && (
-            <KnativeServiceDetails
-              namespace={selected.namespace}
-              name={selected.name}
-              cluster={selected.cluster}
-            />
-          )}
+          {selectedKservice && <KnativeServiceDetails kservice={selectedKservice} />}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailOpen(false)}>Close</Button>

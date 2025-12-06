@@ -126,7 +126,7 @@ type ParseAndMapResult<TResult> =
   | { ok: true; value: TResult[] }
   | { ok: false; error: KnativeApiError };
 
-function toApiError(error: unknown, fallbackMessage: string): KnativeApiError {
+export function toApiError(error: unknown, fallbackMessage: string): KnativeApiError {
   const parsedError = KnativeApiErrorSchema.safeParse(error);
   if (parsedError.success) {
     return parsedError.data;
@@ -1359,37 +1359,6 @@ export function useWatchKnativeServices(
   return {
     data: mapped.value,
     error: undefined,
-    ...rest,
-  };
-}
-
-export function useWatchKnativeService(args: WatchKnativeServiceArgs): WatchKnativeServiceResult {
-  const {
-    data: services,
-    error,
-    ...rest
-  } = useWatchKnativeServices({
-    clusters: args.clusters,
-    namespace: args.namespace,
-  });
-
-  const service =
-    services?.find(svc => {
-      const ns = svc.metadata.namespace ?? args.namespace;
-      return svc.metadata.name === args.name && ns === args.namespace;
-    }) ?? undefined;
-
-  let finalError = error;
-  if (!finalError && services && !rest.isLoading && !rest.isFetching && !service) {
-    finalError = {
-      kind: 'NotFound',
-      message: 'KService not found',
-    };
-  }
-
-  return {
-    data: service,
-    error: finalError,
     ...rest,
   };
 }

@@ -39,6 +39,8 @@ This document describes how to work with this repository, both for **human contr
   - Prefer explicit types over `any`; keep TypeScript strict where reasonable.
   - Keep components small and composable; extract shared logic into `components/common` or `src/api` as appropriate.
   - Respect the **DRY (Don't Repeat Yourself)** and **YAGNI (You Aren't Gonna Need It)** principles: avoid duplicating logic or structures, extract shared behavior into reusable functions, hooks, components, or utility modules, and avoid adding features or abstractions before there is a clear, concrete need.
+  - Define variables, helpers, and components only when they are actually needed instead of in anticipation of possible future use.
+  - Export only the symbols that are required by other modules; do not add `export` just because something might be used from the outside in the future.
   - For React performance and compatibility with React Compiler, **do not use** `useCallback` or `useMemo` in new or updated code; prefer plain functions and components and rely on the compiler's optimizations instead.
 - **Knative terminology**
   - In the `knative` plugin, always refer to Knative Service resources as **"KService"** in component names, variable and type names, comments, and user-facing strings.
@@ -316,6 +318,7 @@ export default function MyComponent() {
     - `npm install`
     - `npm run build` (or other scripts defined in `package.json`)
   - If a lint or test script exists, run it before opening a PR.
+  - Before committing, run `npx knip --fix` to detect and remove unused exports and other dead code.
 
 ---
 

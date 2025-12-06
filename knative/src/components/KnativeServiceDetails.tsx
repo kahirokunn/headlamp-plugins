@@ -1,12 +1,12 @@
 import React from 'react';
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import {
-  useWatchKnativeService,
   useWatchKnativeRevisions,
   useRedeployServiceMutation,
   useRestartServiceMutation,
   useFetchAutoscalingGlobalDefaultsQuery,
   useFetchIngressClassQuery,
+  KnativeServiceWithCluster,
 } from '../api/knativeRtkApi';
 import type { KnativeRevision } from '../types/knative';
 import { useNotify } from './common/notifications/useNotify';
@@ -20,25 +20,18 @@ import IngressIntegrationsSection from './IngressIntegrationsSection';
 import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 
 type KnativeServiceDetailsProps = {
-  namespace: string;
-  name: string;
-  cluster: string;
+  kservice: KnativeServiceWithCluster;
 };
 
-export default function KnativeServiceDetails({
-  namespace,
-  name,
-  cluster,
-}: KnativeServiceDetailsProps) {
-  const clusters = [cluster];
+export default function KnativeServiceDetails({ kservice }: KnativeServiceDetailsProps) {
+  const {
+    cluster,
+    metadata: { name },
+  } = kservice;
+  const namespace = kservice.metadata.namespace!;
+  const clusters = [kservice.cluster];
   const [acting, setActing] = React.useState<string | null>(null);
   const { notifyError, notifyInfo } = useNotify();
-
-  const {
-    data: kservice,
-    error: serviceError,
-    isLoading: serviceLoading,
-  } = useWatchKnativeService({ clusters, namespace, name });
 
   const {
     data: revisionsData,
@@ -87,14 +80,11 @@ export default function KnativeServiceDetails({
   }, [ingressClassData, cluster]);
 
   const error = React.useMemo(() => {
-    if (serviceError) {
-      return (serviceError as { message?: string })?.message || 'Failed to load service';
-    }
     if (revisionsError) {
       return (revisionsError as { message?: string })?.message || 'Failed to load revisions';
     }
     return null;
-  }, [serviceError, revisionsError]);
+  }, [revisionsError]);
 
   const ready = kservice?.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
 
@@ -136,7 +126,7 @@ export default function KnativeServiceDetails({
     );
   }
 
-  if (serviceLoading || revisionsLoading || !kservice || !revs) {
+  if (revisionsLoading || !kservice || !revs) {
     return (
       <Box p={4} display="flex" justifyContent="center" alignItems="center">
         <CircularProgress />
@@ -167,7 +157,7 @@ export default function KnativeServiceDetails({
         serviceName={kservice.metadata.name}
         namespace={kservice.metadata.namespace ?? namespace}
         cluster={cluster}
-        ready={!!ready}
+        ready={ready}
         acting={acting}
         onRedeploy={handleRedeploy}
         onRestart={handleRestart}
@@ -179,7 +169,7 @@ export default function KnativeServiceDetails({
         </Typography>
       )}
 
-      <ConditionsSection title="Conditions" conditions={kservice.status?.conditions} />
+      {kservice.status?.conditions && <ConditionsSection conditions={kservice.status.conditions} />}
 
       <TrafficSplittingSection
         cluster={cluster}

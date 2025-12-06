@@ -1,5 +1,5 @@
 import React from 'react';
-import { listHttpRoutesByVisibilityForService } from '../../../api/envoy';
+import { useListHttpRoutesByVisibilityForServiceQuery } from '../../../api/envoy';
 import { useFetchNetworkTemplatesQuery } from '../../../api/knativeRtkApi';
 import HttpRoutesSection from './HttpRoutesSection';
 import type { HTTPRoute } from '../../../api/envoy';
@@ -16,8 +16,13 @@ export default function GatewayApiIngressSection({
   cluster,
 }: GatewayApiIngressSectionProps) {
   const clusters = [cluster];
-  const [externalHttpRoutes, setExternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
-  const [internalHttpRoutes, setInternalHttpRoutes] = React.useState<HTTPRoute[] | null>(null);
+  const { data: httpRoutesData } = useListHttpRoutesByVisibilityForServiceQuery(
+    { cluster, namespace, serviceName },
+    { skip: !cluster, pollingInterval: 4000 }
+  );
+
+  const externalHttpRoutes: HTTPRoute[] | null = httpRoutesData?.external ?? null;
+  const internalHttpRoutes: HTTPRoute[] | null = httpRoutesData?.internal ?? null;
 
   const { data: networkTemplatesData } = useFetchNetworkTemplatesQuery(
     { clusters },
@@ -31,32 +36,6 @@ export default function GatewayApiIngressSection({
     const { cluster: _cluster, ...templates } = match;
     return templates;
   }, [networkTemplatesData, cluster]);
-
-  const refetchRoutes = React.useCallback(async () => {
-    try {
-      const { external, internal } = await listHttpRoutesByVisibilityForService(
-        namespace,
-        serviceName
-      );
-      setExternalHttpRoutes(external);
-      setInternalHttpRoutes(internal);
-    } catch {
-      setExternalHttpRoutes([]);
-      setInternalHttpRoutes([]);
-    }
-  }, [namespace, serviceName]);
-
-  // Initial fetch and polling for routes
-  React.useEffect(() => {
-    refetchRoutes();
-  }, [refetchRoutes]);
-
-  React.useEffect(() => {
-    const timer = window.setInterval(() => {
-      refetchRoutes();
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [refetchRoutes]);
 
   return (
     <>

@@ -14,20 +14,15 @@ import type { Condition } from '../types/knative';
 import { getAge } from '../api/knativeRtkApi';
 
 type ConditionsSectionProps = {
-  title?: string;
-  conditions: Condition[] | undefined | null;
+  conditions: Condition[];
 };
 
-export default function ConditionsSection({
-  title = 'Conditions',
-  conditions,
-}: ConditionsSectionProps) {
-  const conds = conditions ?? [];
+export default function ConditionsSection({ conditions }: ConditionsSectionProps) {
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack>
         <Typography variant="subtitle2" gutterBottom>
-          {title}
+          Conditions
         </Typography>
         <TableContainer>
           <Table size="small">
@@ -41,8 +36,8 @@ export default function ConditionsSection({
               </TableRow>
             </TableHead>
             <TableBody>
-              {conds.map((c, i) => (
-                <TableRow key={i}>
+              {conditions.map((c, i) => (
+                <TableRow key={c.type}>
                   <TableCell>{c.type}</TableCell>
                   <TableCell>
                     {c.status === 'True' ? (

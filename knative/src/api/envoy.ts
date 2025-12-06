@@ -1,5 +1,6 @@
 import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
 import * as z from 'zod/mini';
+import { knativeRtkApi, toApiError } from './knativeRtkApi';
 
 const ObjectMetaSchema = z.object({
   name: z.string(),
@@ -149,6 +150,51 @@ const HTTPRouteListSchema = z.object({
   items: z.optional(z.array(HTTPRouteSchema)),
 });
 
+type HttpRoutesByVisibility = {
+  external: HTTPRoute[];
+  internal: HTTPRoute[];
+};
+
+type UpsertBasicAuthSecretArgs = {
+  cluster: string;
+  namespace: string;
+  name: string;
+  username: string;
+  password: string;
+  ownerHttpRouteName?: string;
+};
+
+type CreateSecurityPolicyForHTTPRouteArgs = {
+  cluster: string;
+  namespace: string;
+  policyName: string;
+  httpRouteName: string;
+  secretName: string;
+};
+
+type CreateIpAccessSecurityPolicyArgs = {
+  cluster: string;
+  namespace: string;
+  policyName: string;
+  httpRouteName: string;
+  allowCidrs: string[];
+  denyCidrs: string[];
+};
+
+type ListHttpRoutesByVisibilityForServiceArgs = {
+  cluster: string;
+  namespace: string;
+  serviceName: string;
+};
+
+type WaitForServiceHttpRouteArgs = {
+  cluster: string;
+  namespace: string;
+  serviceName: string;
+  timeoutMs?: number;
+  intervalMs?: number;
+};
+
 function base64Encode(bytes: Uint8Array): string {
   let bin = '';
   for (let i = 0; i < bytes.length; i++) {
@@ -176,24 +222,32 @@ async function buildHtpasswdLine(username: string, password: string): Promise<st
   return `${username}:{SHA}${b64}`;
 }
 
-async function getHttpRoute(namespace: string, name: string): Promise<HTTPRoute | null> {
+async function getHttpRoute(
+  cluster: string,
+  namespace: string,
+  name: string
+): Promise<HTTPRoute | null> {
   try {
-    return HTTPRouteSchema.parse(
-      await ApiProxy.request(
-        `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes/${name}`,
-        { method: 'GET' }
-      )
+    const response = await ApiProxy.clusterRequest(
+      `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes/${name}`,
+      { method: 'GET', cluster }
     );
+    const parsed = HTTPRouteSchema.safeParse(response);
+    if (!parsed.success) {
+      return null;
+    }
+    return parsed.data;
   } catch {
     return null;
   }
 }
 
 async function buildHttpRouteOwnerRef(
+  cluster: string,
   namespace: string,
   httpRouteName: string
 ): Promise<OwnerReference | null> {
-  const route = await getHttpRoute(namespace, httpRouteName);
+  const route = await getHttpRoute(cluster, namespace, httpRouteName);
   if (!route) return null;
   return {
     apiVersion: route.apiVersion || 'gateway.networking.k8s.io/v1',
@@ -204,77 +258,44 @@ async function buildHttpRouteOwnerRef(
   };
 }
 
-async function getSecret(namespace: string, name: string): Promise<K8sSecret | null> {
+async function getSecret(
+  cluster: string,
+  namespace: string,
+  name: string
+): Promise<K8sSecret | null> {
   try {
-    return K8sSecretSchema.parse(
-      await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
+    const response = await ApiProxy.clusterRequest(
+      `/api/v1/namespaces/${namespace}/secrets/${name}`,
+      {
         method: 'GET',
-      })
+        cluster,
+      }
     );
+    const parsed = K8sSecretSchema.safeParse(response);
+    if (!parsed.success) {
+      return null;
+    }
+    return parsed.data;
   } catch {
     return null;
   }
 }
 
-export async function upsertBasicAuthSecret(
-  namespace: string,
-  name: string,
-  username: string,
-  password: string,
-  ownerHttpRouteName?: string
-): Promise<void> {
-  const line = await buildHtpasswdLine(username, password);
-  const fileContent = `${line}\n`;
-  const dataB64 =
-    typeof btoa === 'function'
-      ? btoa(fileContent)
-      : Buffer.from(fileContent, 'utf8').toString('base64');
-  const existing = await getSecret(namespace, name);
-  if (!existing) {
-    const ownerRef = ownerHttpRouteName
-      ? await buildHttpRouteOwnerRef(namespace, ownerHttpRouteName)
-      : null;
-    const body = {
-      apiVersion: 'v1',
-      kind: 'Secret',
-      metadata: {
-        name,
-        namespace,
-        ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
-      },
-      type: 'Opaque',
-      data: { '.htpasswd': dataB64 },
-    };
-    await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } else {
-    const patch = {
-      data: { '.htpasswd': dataB64 },
-      type: 'Opaque',
-    };
-    await ApiProxy.request(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/merge-patch+json' },
-      body: JSON.stringify(patch),
-    });
-  }
-}
-
 async function findSecurityPolicyForHTTPRoute(
+  cluster: string,
   namespace: string,
   httpRouteName: string
 ): Promise<SecurityPolicy | null> {
   try {
-    const res = SecurityPolicyListSchema.parse(
-      await ApiProxy.request(
-        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies`,
-        { method: 'GET' }
-      )
+    const response = await ApiProxy.clusterRequest(
+      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies`,
+      { method: 'GET', cluster }
     );
-    const items = res.items ?? [];
+    const parsed = SecurityPolicyListSchema.safeParse(response);
+    if (!parsed.success) {
+      return null;
+    }
+    const items = parsed.data.items ?? [];
     return (
       items.find(sp =>
         (sp.spec?.targetRefs ?? []).some(
@@ -337,145 +358,11 @@ function buildAuthorizationRulesForSpec(
   return { authorization: { rules } };
 }
 
-export async function createSecurityPolicyForHTTPRoute(params: {
-  namespace: string;
-  policyName: string;
-  httpRouteName: string;
-  secretName: string;
-}): Promise<SecurityPolicy> {
-  const existing = await findSecurityPolicyForHTTPRoute(params.namespace, params.httpRouteName);
-  if (existing?.metadata?.name) {
-    const patch = {
-      spec: {
-        basicAuth: {
-          users: {
-            name: params.secretName,
-          },
-        },
-      },
-    };
-    await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/merge-patch+json' },
-        body: JSON.stringify(patch),
-      }
-    );
-    return SecurityPolicySchema.parse(
-      await ApiProxy.request(
-        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-        { method: 'GET' }
-      )
-    );
-  }
-  const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
-  const body: SecurityPolicy = {
-    apiVersion: 'gateway.envoyproxy.io/v1alpha1',
-    kind: 'SecurityPolicy',
-    metadata: {
-      name: params.policyName,
-      namespace: params.namespace,
-      ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
-    },
-    spec: {
-      targetRefs: [
-        {
-          group: 'gateway.networking.k8s.io',
-          kind: 'HTTPRoute',
-          name: params.httpRouteName,
-        },
-      ],
-      basicAuth: {
-        users: {
-          name: params.secretName,
-        },
-      },
-    },
-  };
-  return SecurityPolicySchema.parse(
-    await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }
-    )
-  );
-}
-
-export async function createIpAccessSecurityPolicy(params: {
-  namespace: string;
-  policyName: string;
-  httpRouteName: string;
-  allowCidrs: string[];
-  denyCidrs: string[];
-}): Promise<SecurityPolicy> {
-  const existing = await findSecurityPolicyForHTTPRoute(params.namespace, params.httpRouteName);
-  if (existing?.metadata?.name) {
-    const patch = {
-      spec: {
-        ...buildAuthorizationRulesForPatch(params.allowCidrs || [], params.denyCidrs || []),
-      },
-    };
-    await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/merge-patch+json' },
-        body: JSON.stringify(patch),
-      }
-    );
-    return SecurityPolicySchema.parse(
-      await ApiProxy.request(
-        `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies/${existing.metadata.name}`,
-        { method: 'GET' }
-      )
-    );
-  }
-  const ownerRef = await buildHttpRouteOwnerRef(params.namespace, params.httpRouteName);
-  const body: SecurityPolicy = {
-    apiVersion: 'gateway.envoyproxy.io/v1alpha1',
-    kind: 'SecurityPolicy',
-    metadata: {
-      name: params.policyName,
-      namespace: params.namespace,
-      ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
-    },
-    spec: {
-      targetRefs: [
-        {
-          group: 'gateway.networking.k8s.io',
-          kind: 'HTTPRoute',
-          name: params.httpRouteName,
-        },
-      ],
-      ...buildAuthorizationRulesForSpec(params.allowCidrs || [], params.denyCidrs || []),
-    },
-  };
-  return SecurityPolicySchema.parse(
-    await ApiProxy.request(
-      `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${params.namespace}/securitypolicies`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }
-    )
-  );
-}
-
-// ---- HTTPRoute hostnames listing for external visibility ("") ----
-
-/**
- * List all HTTPRoute hostnames for a given Knative Service that are externally visible.
- * External is defined as: metadata.labels['networking.knative.dev/visibility'] === '' (empty string).
- */
-export async function listHttpRoutesByVisibilityForService(
+async function listHttpRoutesByVisibilityForServiceInternal(
+  cluster: string,
   namespace: string,
   serviceName: string
-): Promise<{ external: HTTPRoute[]; internal: HTTPRoute[] }> {
+): Promise<HttpRoutesByVisibility> {
   try {
     const labelSelector1 = encodeURIComponent(`serving.knative.dev/service=${serviceName}`);
     const labelSelector2 = encodeURIComponent(`serving.knative.dev/route=${serviceName}`);
@@ -483,22 +370,28 @@ export async function listHttpRoutesByVisibilityForService(
       `serving.knative.dev/domainMappingNamespace=${namespace}`
     );
     const [raw1, raw2, rawDm] = await Promise.all([
-      ApiProxy.request(
+      ApiProxy.clusterRequest(
         `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelector1}`,
-        { method: 'GET' }
+        { method: 'GET', cluster }
       ),
-      ApiProxy.request(
+      ApiProxy.clusterRequest(
         `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelector2}`,
-        { method: 'GET' }
+        { method: 'GET', cluster }
       ),
-      ApiProxy.request(
+      ApiProxy.clusterRequest(
         `/apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/httproutes?labelSelector=${labelSelectorDmNs}`,
-        { method: 'GET' }
+        { method: 'GET', cluster }
       ),
     ]);
-    const res1 = HTTPRouteListSchema.parse(raw1);
-    const res2 = HTTPRouteListSchema.parse(raw2);
-    const resDm = HTTPRouteListSchema.parse(rawDm);
+    const parsed1 = HTTPRouteListSchema.safeParse(raw1);
+    const parsed2 = HTTPRouteListSchema.safeParse(raw2);
+    const parsedDm = HTTPRouteListSchema.safeParse(rawDm);
+    if (!parsed1.success || !parsed2.success || !parsedDm.success) {
+      return { external: [], internal: [] };
+    }
+    const res1 = parsed1.data;
+    const res2 = parsed2.data;
+    const resDm = parsedDm.data;
     const mergedByName = new Map<string, HTTPRoute>();
     [...(res1.items ?? []), ...(res2.items ?? [])].forEach(r => {
       if (r?.metadata?.name) mergedByName.set(r.metadata.name, r);
@@ -528,24 +421,276 @@ export async function listHttpRoutesByVisibilityForService(
   }
 }
 
-// Wait until an HTTPRoute for a given Knative Service appears (best-effort).
-// Used at creation time to attach SecurityPolicies.
-export async function waitForServiceHttpRoute(
-  namespace: string,
-  serviceName: string,
-  timeoutMs = 30000,
-  intervalMs = 1000
-): Promise<HTTPRoute | null> {
-  const start = Date.now();
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { external, internal } = await listHttpRoutesByVisibilityForService(
-      namespace,
-      serviceName
-    );
-    const route = external[0] || internal[0] || null;
-    if (route) return route;
-    if (Date.now() - start > timeoutMs) return null;
-    await new Promise(resolve => setTimeout(resolve, intervalMs));
-  }
-}
+const envoyRtkApi = knativeRtkApi.injectEndpoints({
+  endpoints: build => ({
+    upsertBasicAuthSecret: build.mutation<void, UpsertBasicAuthSecretArgs>({
+      async queryFn({ cluster, namespace, name, username, password, ownerHttpRouteName }) {
+        const line = await buildHtpasswdLine(username, password);
+        const fileContent = `${line}\n`;
+        const dataB64 =
+          typeof btoa === 'function'
+            ? btoa(fileContent)
+            : Buffer.from(fileContent, 'utf8').toString('base64');
+
+        try {
+          const existing = await getSecret(cluster, namespace, name);
+          if (!existing) {
+            const ownerRef = ownerHttpRouteName
+              ? await buildHttpRouteOwnerRef(cluster, namespace, ownerHttpRouteName)
+              : null;
+            const body = {
+              apiVersion: 'v1',
+              kind: 'Secret',
+              metadata: {
+                name,
+                namespace,
+                ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+              },
+              type: 'Opaque',
+              data: { '.htpasswd': dataB64 },
+            };
+            await ApiProxy.clusterRequest(`/api/v1/namespaces/${namespace}/secrets`, {
+              method: 'POST',
+              cluster,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+          } else {
+            const patch = {
+              data: { '.htpasswd': dataB64 },
+              type: 'Opaque',
+            };
+            await ApiProxy.clusterRequest(`/api/v1/namespaces/${namespace}/secrets/${name}`, {
+              method: 'PATCH',
+              cluster,
+              headers: { 'Content-Type': 'application/merge-patch+json' },
+              body: JSON.stringify(patch),
+            });
+          }
+          return { data: undefined };
+        } catch (error) {
+          return { error: toApiError(error, 'Failed to upsert basic auth Secret') };
+        }
+      },
+    }),
+
+    createSecurityPolicyForHTTPRoute: build.mutation<void, CreateSecurityPolicyForHTTPRouteArgs>({
+      async queryFn({ cluster, namespace, policyName, httpRouteName, secretName }) {
+        try {
+          const existing = await findSecurityPolicyForHTTPRoute(cluster, namespace, httpRouteName);
+          if (existing?.metadata?.name) {
+            const patch = {
+              spec: {
+                basicAuth: {
+                  users: {
+                    name: secretName,
+                  },
+                },
+              },
+            };
+            await ApiProxy.clusterRequest(
+              `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies/${existing.metadata.name}`,
+              {
+                method: 'PATCH',
+                cluster,
+                headers: { 'Content-Type': 'application/merge-patch+json' },
+                body: JSON.stringify(patch),
+              }
+            );
+            const getResponse = await ApiProxy.clusterRequest(
+              `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies/${existing.metadata.name}`,
+              { method: 'GET', cluster }
+            );
+            const parsed = SecurityPolicySchema.safeParse(getResponse);
+            if (!parsed.success) {
+              return {
+                error: {
+                  kind: 'ValidationError',
+                  message: 'Invalid SecurityPolicy response',
+                },
+              };
+            }
+            return { data: undefined };
+          }
+
+          const ownerRef = await buildHttpRouteOwnerRef(cluster, namespace, httpRouteName);
+          const body: SecurityPolicy = {
+            apiVersion: 'gateway.envoyproxy.io/v1alpha1',
+            kind: 'SecurityPolicy',
+            metadata: {
+              name: policyName,
+              namespace,
+              ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+            },
+            spec: {
+              targetRefs: [
+                {
+                  group: 'gateway.networking.k8s.io',
+                  kind: 'HTTPRoute',
+                  name: httpRouteName,
+                },
+              ],
+              basicAuth: {
+                users: {
+                  name: secretName,
+                },
+              },
+            },
+          };
+          const response = await ApiProxy.clusterRequest(
+            `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies`,
+            {
+              method: 'POST',
+              cluster,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            }
+          );
+          const parsed = SecurityPolicySchema.safeParse(response);
+          if (!parsed.success) {
+            return {
+              error: {
+                kind: 'ValidationError',
+                message: 'Invalid SecurityPolicy response',
+              },
+            };
+          }
+          return { data: undefined };
+        } catch (error) {
+          return {
+            error: toApiError(error, 'Failed to create SecurityPolicy for HTTPRoute'),
+          };
+        }
+      },
+    }),
+
+    createIpAccessSecurityPolicy: build.mutation<void, CreateIpAccessSecurityPolicyArgs>({
+      async queryFn({ cluster, namespace, policyName, httpRouteName, allowCidrs, denyCidrs }) {
+        try {
+          const existing = await findSecurityPolicyForHTTPRoute(cluster, namespace, httpRouteName);
+          if (existing?.metadata?.name) {
+            const patch = {
+              spec: {
+                ...buildAuthorizationRulesForPatch(allowCidrs || [], denyCidrs || []),
+              },
+            };
+            await ApiProxy.clusterRequest(
+              `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies/${existing.metadata.name}`,
+              {
+                method: 'PATCH',
+                cluster,
+                headers: { 'Content-Type': 'application/merge-patch+json' },
+                body: JSON.stringify(patch),
+              }
+            );
+            const getResponse = await ApiProxy.clusterRequest(
+              `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies/${existing.metadata.name}`,
+              { method: 'GET', cluster }
+            );
+            const parsed = SecurityPolicySchema.safeParse(getResponse);
+            if (!parsed.success) {
+              return {
+                error: {
+                  kind: 'ValidationError',
+                  message: 'Invalid SecurityPolicy response',
+                },
+              };
+            }
+            return { data: undefined };
+          }
+
+          const ownerRef = await buildHttpRouteOwnerRef(cluster, namespace, httpRouteName);
+          const body: SecurityPolicy = {
+            apiVersion: 'gateway.envoyproxy.io/v1alpha1',
+            kind: 'SecurityPolicy',
+            metadata: {
+              name: policyName,
+              namespace,
+              ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+            },
+            spec: {
+              targetRefs: [
+                {
+                  group: 'gateway.networking.k8s.io',
+                  kind: 'HTTPRoute',
+                  name: httpRouteName,
+                },
+              ],
+              ...buildAuthorizationRulesForSpec(allowCidrs || [], denyCidrs || []),
+            },
+          };
+          const response = await ApiProxy.clusterRequest(
+            `/apis/gateway.envoyproxy.io/v1alpha1/namespaces/${namespace}/securitypolicies`,
+            {
+              method: 'POST',
+              cluster,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            }
+          );
+          const parsed = SecurityPolicySchema.safeParse(response);
+          if (!parsed.success) {
+            return {
+              error: {
+                kind: 'ValidationError',
+                message: 'Invalid SecurityPolicy response',
+              },
+            };
+          }
+          return { data: undefined };
+        } catch (error) {
+          return {
+            error: toApiError(error, 'Failed to create IP access SecurityPolicy'),
+          };
+        }
+      },
+    }),
+
+    listHttpRoutesByVisibilityForService: build.query<
+      HttpRoutesByVisibility,
+      ListHttpRoutesByVisibilityForServiceArgs
+    >({
+      async queryFn({ cluster, namespace, serviceName }) {
+        const result = await listHttpRoutesByVisibilityForServiceInternal(
+          cluster,
+          namespace,
+          serviceName
+        );
+        return { data: result };
+      },
+    }),
+
+    waitForServiceHttpRoute: build.mutation<HTTPRoute | null, WaitForServiceHttpRouteArgs>({
+      async queryFn({ cluster, namespace, serviceName, timeoutMs = 30000, intervalMs = 1000 }) {
+        const start = Date.now();
+        const effectiveInterval = intervalMs > 0 ? intervalMs : 1000;
+        const effectiveTimeout = timeoutMs > 0 ? timeoutMs : 30000;
+
+        // Poll until an HTTPRoute appears or timeout elapses.
+        while (Date.now() - start <= effectiveTimeout) {
+          const { external, internal } = await listHttpRoutesByVisibilityForServiceInternal(
+            cluster,
+            namespace,
+            serviceName
+          );
+          const route = external[0] || internal[0] || null;
+          if (route) {
+            return { data: route };
+          }
+          await new Promise(resolve => setTimeout(resolve, effectiveInterval));
+        }
+
+        return { data: null };
+      },
+    }),
+  }),
+  overrideExisting: false,
+});
+
+export const {
+  useUpsertBasicAuthSecretMutation,
+  useCreateSecurityPolicyForHTTPRouteMutation,
+  useCreateIpAccessSecurityPolicyMutation,
+  useListHttpRoutesByVisibilityForServiceQuery,
+  useWaitForServiceHttpRouteMutation,
+} = envoyRtkApi;

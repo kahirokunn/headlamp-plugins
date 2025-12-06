@@ -21,10 +21,10 @@ import {
   useFetchIngressClassQuery,
 } from '../api/knativeRtkApi';
 import {
-  createIpAccessSecurityPolicy,
-  createSecurityPolicyForHTTPRoute,
-  upsertBasicAuthSecret,
-  waitForServiceHttpRoute,
+  useCreateIpAccessSecurityPolicyMutation,
+  useCreateSecurityPolicyForHTTPRouteMutation,
+  useUpsertBasicAuthSecretMutation,
+  useWaitForServiceHttpRouteMutation,
 } from '../api/envoy';
 import { useNotify } from './common/notifications/useNotify';
 import IngressSecuritySection from './IngressSecuritySection';
@@ -99,6 +99,10 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
 
   const [createSecret] = useCreateSecretMutation();
   const [createService] = useCreateServiceMutation();
+  const [upsertBasicAuthSecret] = useUpsertBasicAuthSecretMutation();
+  const [createSecurityPolicyForHTTPRoute] = useCreateSecurityPolicyForHTTPRouteMutation();
+  const [createIpAccessSecurityPolicy] = useCreateIpAccessSecurityPolicyMutation();
+  const [waitForServiceHttpRoute] = useWaitForServiceHttpRouteMutation();
   const { data: ingressClassData, isLoading: ingressClassLoading } = useFetchIngressClassQuery(
     { clusters },
     { skip: clusters.length === 0 }
@@ -160,7 +164,11 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
   async function configureSecurityForService(serviceNamespace: string, serviceName: string) {
     if (!enableBasicAuth && !enableIpAccessControl) return;
 
-    const route = await waitForServiceHttpRoute(serviceNamespace, serviceName);
+    const route = await waitForServiceHttpRoute({
+      cluster,
+      namespace: serviceNamespace,
+      serviceName,
+    }).unwrap();
     if (!route) {
       throw new Error('Timed out while waiting for HTTPRoute of the new service');
     }
@@ -168,31 +176,34 @@ export default function CreateKnativeServiceDialog({ onClose, cluster }: Props) 
     const basicAuthSecretName = `${serviceName}-basic-auth`;
 
     if (enableBasicAuth) {
-      await upsertBasicAuthSecret(
-        serviceNamespace,
-        basicAuthSecretName.trim(),
-        basicAuthUsername.trim(),
-        basicAuthPassword,
-        httpRouteName
-      );
+      await upsertBasicAuthSecret({
+        cluster,
+        namespace: serviceNamespace,
+        name: basicAuthSecretName.trim(),
+        username: basicAuthUsername.trim(),
+        password: basicAuthPassword,
+        ownerHttpRouteName: httpRouteName,
+      }).unwrap();
       await createSecurityPolicyForHTTPRoute({
+        cluster,
         namespace: serviceNamespace,
         policyName: httpRouteName,
         httpRouteName,
         secretName: basicAuthSecretName.trim(),
-      });
+      }).unwrap();
     }
 
     if (enableIpAccessControl) {
       const allow = sanitizeList(ipAllowCidrs);
       const deny = sanitizeList(ipDenyCidrs);
       await createIpAccessSecurityPolicy({
+        cluster,
         namespace: serviceNamespace,
         policyName: httpRouteName,
         httpRouteName,
         allowCidrs: allow,
         denyCidrs: deny,
-      });
+      }).unwrap();
     }
   }
 
