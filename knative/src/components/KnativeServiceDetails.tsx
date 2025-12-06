@@ -1,7 +1,7 @@
 import React from 'react';
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import {
-  useGetServiceQuery,
+  useWatchKnativeService,
   useWatchKnativeRevisions,
   useRedeployServiceMutation,
   useRestartServiceMutation,
@@ -38,8 +38,7 @@ export default function KnativeServiceDetails({
     data: kservice,
     error: serviceError,
     isLoading: serviceLoading,
-    refetch: refetchService,
-  } = useGetServiceQuery({ cluster, namespace, name }, { skip: !cluster || !namespace || !name });
+  } = useWatchKnativeService({ clusters, namespace, name });
 
   const {
     data: revisionsData,
@@ -105,7 +104,6 @@ export default function KnativeServiceDetails({
     try {
       await redeployService({ cluster, namespace, name }).unwrap();
       notifyInfo('Redeploy requested');
-      refetchService();
     } catch (err: unknown) {
       const error = err as { message?: string } | undefined;
       const detail = error?.message?.trim();
@@ -121,7 +119,6 @@ export default function KnativeServiceDetails({
     try {
       await restartService({ cluster, namespace, service: kservice }).unwrap();
       notifyInfo('Restart requested');
-      refetchService();
     } catch (err: unknown) {
       const error = err as { message?: string } | undefined;
       const detail = error?.message?.trim();
@@ -190,9 +187,6 @@ export default function KnativeServiceDetails({
         name={name}
         service={kservice}
         revisions={revs}
-        onSaved={() => {
-          refetchService();
-        }}
       />
 
       <DomainMappingSection namespace={namespace} serviceName={name} cluster={cluster} />
@@ -211,9 +205,6 @@ export default function KnativeServiceDetails({
         cluster={cluster}
         service={kservice}
         defaults={autoDefaults}
-        onSaved={() => {
-          refetchService();
-        }}
       />
 
       <ScaleBoundsSection
@@ -222,9 +213,6 @@ export default function KnativeServiceDetails({
         service={kservice}
         defaults={autoDefaults}
         cluster={cluster}
-        onSaved={() => {
-          refetchService();
-        }}
       />
     </Stack>
   );

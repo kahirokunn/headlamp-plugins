@@ -24,17 +24,9 @@ type Props = {
   name: string;
   service: KnativeService;
   revisions: KnativeRevision[];
-  onSaved?: () => void;
 };
 
-export default function TrafficSplittingSection({
-  cluster,
-  namespace,
-  name,
-  service,
-  revisions,
-  onSaved,
-}: Props) {
+export default function TrafficSplittingSection({ cluster, namespace, name, service, revisions }: Props) {
   const [updateTraffic, { isLoading: savingTraffic }] = useUpdateTrafficMutation();
   const [revPercents, setRevPercents] = React.useState<Record<string, number>>({});
   const [revTags, setRevTags] = React.useState<Record<string, string[]>>({});
@@ -292,7 +284,6 @@ export default function TrafficSplittingSection({
       if (latestTagInputRef.current) latestTagInputRef.current.value = '';
 
       notifySuccess('Traffic updated');
-      onSaved?.();
     } catch (err: unknown) {
       const error = err as { message?: string } | undefined;
       const detail = error?.message?.trim();

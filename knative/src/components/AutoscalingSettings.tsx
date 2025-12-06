@@ -39,14 +39,12 @@ export default function AutoscalingSettings({
   cluster,
   service,
   defaults,
-  onSaved,
 }: {
   namespace: string;
   name: string;
   cluster: string;
   service: KnativeService;
   defaults: AutoscalingDefaults | null;
-  onSaved?: () => void;
 }) {
   const [updateAutoscalingSettings, { isLoading: saving }] = useUpdateAutoscalingSettingsMutation();
   const anns = service?.spec?.template?.metadata?.annotations ?? {};
@@ -116,7 +114,6 @@ export default function AutoscalingSettings({
         },
       }).unwrap();
       notifySuccess('Autoscaling updated');
-      onSaved?.();
     } catch (err: unknown) {
       const error = err as { message?: string } | undefined;
       const detail = error?.message?.trim();

@@ -200,12 +200,6 @@ function mapWatchedResources<TParsed, TResult>(
   return { ok: true, value: mapped };
 }
 
-type GetServiceArgs = {
-  cluster: string;
-  namespace: string;
-  name: string;
-};
-
 type CreateSecretArgs = {
   cluster: string;
   namespace: string;
@@ -517,7 +511,7 @@ const emptyBaseQuery: KnativeBaseQueryFn = async () => ({
 export const knativeRtkApi = createApi({
   reducerPath: 'knativeRtkApi',
   baseQuery: emptyBaseQuery,
-  tagTypes: ['KnativeService', 'KnativeRevision', 'DomainMapping', 'ClusterDomainClaim', 'Config'],
+  tagTypes: ['KnativeRevision', 'DomainMapping', 'ClusterDomainClaim', 'Config'],
   endpoints: build => ({
     watchResources: build.query<KubernetesResourceEntityState, WatchResourcesArgs>({
       async queryFn() {
@@ -591,38 +585,6 @@ export const knativeRtkApi = createApi({
           }
         }
       },
-    }),
-
-    getService: build.query<KnativeServiceWithCluster, GetServiceArgs>({
-      async queryFn({ cluster, namespace, name }) {
-        try {
-          const response = await ApiProxy.clusterRequest(
-            `${KN_SERVICE_BASE}/namespaces/${namespace}/services/${name}`,
-            {
-              method: 'GET',
-              cluster,
-            }
-          );
-          const parsed = KnativeServiceSchema.safeParse(response);
-          if (!parsed.success) {
-            return {
-              error: { kind: 'ValidationError', message: 'Invalid Knative Service response' },
-            };
-          }
-          return { data: { ...parsed.data, cluster } };
-        } catch (error) {
-          return { error: toApiError(error, 'Failed to fetch Knative Service') };
-        }
-      },
-      providesTags: result =>
-        result
-          ? [
-              {
-                type: 'KnativeService' as const,
-                id: `${result.cluster}/${result.metadata.namespace ?? ''}/${result.metadata.name}`,
-              },
-            ]
-          : [],
     }),
 
     createSecret: build.mutation<void, CreateSecretArgs>({
@@ -760,7 +722,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to create Knative Service') };
         }
       },
-      invalidatesTags: [{ type: 'KnativeService', id: 'LIST' }],
     }),
 
     createDomainMapping: build.mutation<DomainMappingWithCluster, CreateDomainMappingArgs>({
@@ -951,9 +912,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to redeploy Knative Service') };
         }
       },
-      invalidatesTags: (_result, _error, { cluster, namespace, name }) => [
-        { type: 'KnativeService', id: `${cluster}/${namespace}/${name}` },
-      ],
     }),
 
     restartService: build.mutation<void, RestartServiceArgs>({
@@ -999,9 +957,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to restart Knative Service') };
         }
       },
-      invalidatesTags: (_result, _error, { cluster, namespace, service }) => [
-        { type: 'KnativeService', id: `${cluster}/${namespace}/${service.metadata.name}` },
-      ],
     }),
 
     updateTraffic: build.mutation<KnativeServiceWithCluster, UpdateTrafficArgs>({
@@ -1032,9 +987,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to update Knative Service traffic') };
         }
       },
-      invalidatesTags: (_result, _error, { cluster, namespace, name }) => [
-        { type: 'KnativeService', id: `${cluster}/${namespace}/${name}` },
-      ],
     }),
 
     updateAutoscalingSettings: build.mutation<
@@ -1117,9 +1069,6 @@ export const knativeRtkApi = createApi({
           return { error: toApiError(error, 'Failed to update autoscaling settings') };
         }
       },
-      invalidatesTags: (_result, _error, { cluster, namespace, name }) => [
-        { type: 'KnativeService', id: `${cluster}/${namespace}/${name}` },
-      ],
     }),
 
     fetchAutoscalingGlobalDefaults: build.query<
@@ -1357,7 +1306,6 @@ export const knativeRtkApi = createApi({
 
 export const {
   useWatchResourcesQuery,
-  useGetServiceQuery,
   useCreateSecretMutation,
   useCreateServiceMutation,
   useCreateDomainMappingMutation,
@@ -1397,6 +1345,17 @@ type WatchResourcesQueryResult = ReturnType<typeof useWatchResourcesQuery>;
 
 type WatchKnativeResult<TResult> = Omit<WatchResourcesQueryResult, 'data' | 'error'> & {
   data?: TResult[];
+  error?: KnativeApiError;
+};
+
+export type WatchKnativeServiceArgs = {
+  clusters: string[];
+  namespace: string;
+  name: string;
+};
+
+export type WatchKnativeServiceResult = Omit<WatchResourcesQueryResult, 'data' | 'error'> & {
+  data?: KnativeServiceWithCluster;
   error?: KnativeApiError;
 };
 
@@ -1459,6 +1418,37 @@ export function useWatchKnativeServices(
   return {
     data: mapped.value,
     error: undefined,
+    ...rest,
+  };
+}
+
+export function useWatchKnativeService(args: WatchKnativeServiceArgs): WatchKnativeServiceResult {
+  const {
+    data: services,
+    error,
+    ...rest
+  } = useWatchKnativeServices({
+    clusters: args.clusters,
+    namespace: args.namespace,
+  });
+
+  const service =
+    services?.find(svc => {
+      const ns = svc.metadata.namespace ?? args.namespace;
+      return svc.metadata.name === args.name && ns === args.namespace;
+    }) ?? undefined;
+
+  let finalError = error;
+  if (!finalError && services && !rest.isLoading && !rest.isFetching && !service) {
+    finalError = {
+      kind: 'NotFound',
+      message: 'KService not found',
+    };
+  }
+
+  return {
+    data: service,
+    error: finalError,
     ...rest,
   };
 }

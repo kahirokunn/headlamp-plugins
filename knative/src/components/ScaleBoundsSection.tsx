@@ -24,14 +24,12 @@ export default function ScaleBoundsSection({
   name,
   service,
   defaults,
-  onSaved,
   cluster,
 }: {
   namespace: string;
   name: string;
   service: KnativeService;
   defaults: AutoscalingDefaults | null;
-  onSaved?: () => void;
   cluster: string;
 }) {
   const [updateAutoscalingSettings, { isLoading: saving }] = useUpdateAutoscalingSettingsMutation();
@@ -98,7 +96,6 @@ export default function ScaleBoundsSection({
         },
       }).unwrap();
       notifySuccess('Scale bounds updated');
-      onSaved?.();
     } catch (err: unknown) {
       const error = err as { message?: string } | undefined;
       const detail = error?.message?.trim();
