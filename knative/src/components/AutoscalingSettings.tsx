@@ -33,22 +33,24 @@ type AutoscalingDefaults = {
   activationScaleDefault: number;
 };
 
+type AutoscalingSettingsProps = {
+  namespace: string;
+  name: string;
+  cluster: string;
+  kservice: KnativeService;
+  defaults: AutoscalingDefaults | null;
+};
+
 export default function AutoscalingSettings({
   namespace,
   name,
   cluster,
-  service,
+  kservice,
   defaults,
-}: {
-  namespace: string;
-  name: string;
-  cluster: string;
-  service: KnativeService;
-  defaults: AutoscalingDefaults | null;
-}) {
+}: AutoscalingSettingsProps) {
   const [updateAutoscalingSettings, { isLoading: saving }] = useUpdateAutoscalingSettingsMutation();
-  const anns = service?.spec?.template?.metadata?.annotations ?? {};
-  const templateSpec = (service?.spec?.template?.spec as Record<string, unknown>) ?? {};
+  const anns = kservice.spec.template?.metadata?.annotations ?? {};
+  const templateSpec = kservice.spec.template?.spec ?? {};
 
   const [metric, setMetric] = React.useState<MetricType>(
     (anns['autoscaling.knative.dev/metric'] as MetricType) || ''
@@ -58,16 +60,16 @@ export default function AutoscalingSettings({
     anns['autoscaling.knative.dev/target-utilization-percentage'] ?? ''
   );
   const [hard, setHard] = React.useState<string>(
-    templateSpec?.hasOwnProperty('containerConcurrency')
-      ? String((templateSpec as any).containerConcurrency ?? '')
+    templateSpec?.hasOwnProperty('containerConcurrency') && templateSpec.containerConcurrency
+      ? String(templateSpec.containerConcurrency)
       : ''
   );
 
   const { notifySuccess, notifyError } = useNotify();
 
   function resetSection() {
-    const a = service?.spec?.template?.metadata?.annotations ?? {};
-    const s = (service?.spec?.template?.spec as Record<string, unknown>) ?? {};
+    const a = kservice.spec.template?.metadata?.annotations ?? {};
+    const s = (kservice.spec.template?.spec as Record<string, unknown>) ?? {};
     setMetric((a['autoscaling.knative.dev/metric'] as MetricType) || '');
     setTarget(a['autoscaling.knative.dev/target'] ?? '');
     setUtil(a['autoscaling.knative.dev/target-utilization-percentage'] ?? '');

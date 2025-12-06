@@ -193,7 +193,7 @@ export default function KnativeServiceDetails({ kservice }: KnativeServiceDetail
         namespace={namespace}
         name={name}
         cluster={cluster}
-        service={kservice}
+        kservice={kservice}
         defaults={autoDefaults}
       />
 
