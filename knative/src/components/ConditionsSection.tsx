@@ -25,7 +25,7 @@ export default function ConditionsSection({ conditions }: ConditionsSectionProps
           Conditions
         </Typography>
         <TableContainer>
-          <Table size="small">
+          <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
             <TableHead>
               <TableRow>
                 <TableCell>Type</TableCell>
@@ -50,7 +50,13 @@ export default function ConditionsSection({ conditions }: ConditionsSectionProps
                   </TableCell>
                   <TableCell>{c.reason || '-'}</TableCell>
                   <TableCell>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      noWrap
+                      sx={{ maxWidth: 400 }}
+                      title={c.message || '-'}
+                    >
                       {c.message || '-'}
                     </Typography>
                   </TableCell>
