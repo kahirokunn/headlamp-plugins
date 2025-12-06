@@ -11,6 +11,10 @@ This document describes how to work with this repository, both for **human contr
   - `src/`: TypeScript & React source code (this is what you edit)
   - `dist/`: Compiled bundle (DO NOT edit manually)
   - `node_modules/`: Dependencies (managed by the package manager)
+- **Reference code (`refs/` directory)**:
+  - `refs/headlamp`: Upstream Headlamp core repository (frontend, backend, docs, etc.), included here as a read-only reference.
+  - `refs/plugins`: Upstream official Headlamp plugins, included as examples of recommended patterns.
+  - When in doubt about `KubeObject` usage, Kubernetes API access, multi-cluster patterns, or UI conventions, **always look at the code under `refs/` first and copy its patterns** instead of inventing new ones.
 
 ---
 
@@ -66,155 +70,54 @@ type UserData = {
 type Data = any;
 ```
 
-- **API implementation with RTK Query**
-  - **All API calls MUST be implemented using RTK Query** (`@reduxjs/toolkit/query/react`). Do not use `ApiProxy.request()` directly in components or API helpers.
-  - Define all API endpoints in a centralized RTK Query API slice (e.g., `src/api/knativeRtkApi.ts`).
-  - Use `createApi` to create the API slice with appropriate `reducerPath` and `tagTypes`.
-  - Define endpoints using `build.query` for read operations and `build.mutation` for write operations.
-  - **All endpoints MUST support multi-cluster operations** by accepting `clusters: string[]` in their arguments.
-  - Inside `queryFn`, use `ApiProxy.clusterRequest()` for individual cluster requests (this is internal implementation detail).
+- **KubeObject-based API access**
+  - Prefer modeling Kubernetes and Knative resources as `KubeObject` classes (from the Headlamp plugin SDK) instead of adding new RTK Query slices or calling `ApiProxy` directly.
+  - **Do not introduce new usages of `ApiProxy.request()` or `ApiProxy.clusterRequest()` from plugin components or API helpers.** For Kubernetes resources, always go through `KubeObject` and its `apiEndpoint` / hooks instead.
+  - When you need a new resource, define a TypeScript interface that extends `KubeObjectInterface`, then create a class that extends `KubeObject<YourInterface>` and sets `kind`, `apiName`, `apiVersion`, and `isNamespaced`.
+  - Fetch data using the `KubeObject` class methods and hooks such as `useList`, `useGet`, `apiList`, and `apiGet`, and use instance methods like `delete`, `update`, and `patch` for mutations, instead of RTK Query.
+  - Look at the upstream Headlamp code under `refs/headlamp/frontend/src/lib/k8s` and the official plugins under `refs/plugins/*/src/resources` (for example `refs/plugins/cert-manager/src/resources/certificateRequest.ts`) as primary reference implementations.
   - Example:
 
 ```ts
-import { createApi } from '@reduxjs/toolkit/query/react';
-import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
-import * as z from 'zod/mini';
+import type { KubeObjectInterface } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
+import { KubeObject } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
 
-// Define schema based on actual API response structure
-const ServiceSchema = z.object({
-  apiVersion: z.string(),
-  kind: z.string(),
-  metadata: z.object({
-    name: z.string(),
-    namespace: z.optional(z.string()),
-  }),
-  spec: z.object({
-    template: z.object({ /* ... */ }),
-  }),
-});
+// Define the shape of the resource returned by the Kubernetes API
+export interface KnativeKService extends KubeObjectInterface {
+  spec: {
+    // ...
+  };
+  status?: {
+    // ...
+  };
+}
 
-type Service = z.infer<typeof ServiceSchema>;
+// Define a KubeObject wrapper for the resource
+export class KService extends KubeObject<KnativeKService> {
+  static kind = 'Service';
+  static apiName = 'services';
+  static apiVersion = 'serving.knative.dev/v1';
+  static isNamespaced = true;
 
-// Multi-cluster aware type
-type ServiceWithCluster = Service & { cluster: string };
+  get spec() {
+    return this.jsonData.spec;
+  }
 
-// Arguments for multi-cluster queries
-type GetServiceArgs = {
-  clusters: string[];
-  namespace: string;
-  name: string;
-};
-
-// Error type
-type ApiError = {
-  kind: 'ValidationError' | 'ApiError' | 'NotFound' | 'UnknownError';
-  message: string;
-};
-
-const emptyBaseQuery: BaseQueryFn<unknown, unknown, ApiError> = async () => ({
-  error: {
-    kind: 'UnknownError',
-    message: 'Base query is not used; endpoints use queryFn.',
-  },
-});
-
-export const knativeRtkApi = createApi({
-  reducerPath: 'knativeRtkApi',
-  baseQuery: emptyBaseQuery, // Use empty base query; endpoints use queryFn
-  tagTypes: ['Service'],
-  endpoints: build => ({
-    getService: build.query<ServiceWithCluster[], GetServiceArgs>({
-      async queryFn({ clusters, namespace, name }) {
-        const results: ServiceWithCluster[] = [];
-
-        for (const cluster of clusters) {
-          try {
-            const response = await ApiProxy.clusterRequest(
-              `/apis/serving.knative.dev/v1/namespaces/${namespace}/services/${name}`,
-              { method: 'GET', cluster }
-            );
-            const parsed = ServiceSchema.safeParse(response);
-            if (!parsed.success) {
-              // Continue to next cluster on validation error
-              continue;
-            }
-            results.push({ ...parsed.data, cluster });
-          } catch (error) {
-            // Continue to next cluster on API error
-            continue;
-          }
-        }
-
-        return { data: results };
-      },
-      providesTags: (result) =>
-        result
-          ? result.map(service => ({
-              type: 'Service' as const,
-              id: `${service.cluster}/${service.metadata.namespace ?? ''}/${service.metadata.name}`,
-            }))
-          : [],
-    }),
-  }),
-});
-
-// Export hooks for use in components
-export const { useGetServiceQuery } = knativeRtkApi;
+  get status() {
+    return this.jsonData.status;
+  }
+}
 ```
 
 - **API response validation**
-  - Use **`zod/mini`** for validating all API responses inside RTK Query `queryFn`.
-  - **All API responses MUST be validated through a Zod schema** before use.
-  - **All API response type definitions MUST be derived from Zod schemas** using `z.infer<typeof SchemaName>`.
-  - Do not use type assertions (`as`) directly on API responses; instead, parse and validate them with Zod schemas first.
-  - **Do not call `.parse()` / `.parseAsync()` on Zod schemas. Always use `.safeParse()` and handle the result (`success` / `error`) explicitly.**
-  - **Schema design principle**: Define schemas based on the **actual structure of data returned from the API**, not necessarily the CRD definition. For example, even if a CRD defines `spec` as optional (for PATCH operations), if the API always returns it (due to mutating webhooks, defaults, etc.), make it required in the schema.
-  - **Important**: `zod/mini` keeps only a small set of methods (for example `.safeParse()` and `.check()`) and moves most validation helpers (like `.min()`, `.max()`, `.trim()`, etc.) to top‑level functions. In this repository, **prefer the functional API over method chaining**:
-    - For optional / nullable, prefer `z.nullable(z.optional(z.string()))` (Zod Mini style) instead of the regular-Zod style `z.string().optional().nullable()`.
-    - For checks like `min` / `max`, prefer `.check()` with functional checks, e.g. `z.string().check(z.minLength(5), z.maxLength(10))` instead of `z.string().min(5).max(10)`.
+  - Do not introduce new heavy schema validation layers (such as `zod/mini`) for Kubernetes API responses in this repository; `KubeObject` helpers and TypeScript interfaces should be the primary way to describe API shapes.
+  - When additional validation is required, prefer small, focused type guards or manual checks close to where the data is used instead of large shared schema hierarchies.
+  - `zod/mini` may still be used for form validation where it adds clear value (see **Form implementation** below), but avoid building new Zod-based validation for fetch APIs.
 
-- **Error handling in RTK Query**
-  - RTK Query endpoints should return `{ data }` on success or `{ error }` on failure (RTK Query standard pattern).
-  - Define **domain‑specific error types** (for example `KnativeApiError` with variants like `'ValidationError' | 'ApiError' | 'NotFound' | 'UnknownError'`) rather than using `string` or `any`.
-  - In `queryFn`, catch errors and convert them to the error type using a helper function (e.g., `toApiError()`).
-  - For multi-cluster queries, handle errors per cluster gracefully (continue processing other clusters even if one fails).
-  - UI/components should consume RTK Query hooks and check `isError` or `error` properties rather than using `try`/`catch`.
-  - Example error handling:
-
-```ts
-import { ApiError } from '@kinvolk/headlamp-plugin/lib/ApiProxy';
-
-type KnativeApiError = {
-  kind: 'ValidationError' | 'ApiError' | 'NotFound' | 'UnknownError';
-  message: string;
-};
-
-function toApiError(error: unknown, fallbackMessage: string): KnativeApiError {
-  if (error instanceof ApiError) {
-    return { kind: 'ApiError', message: error.message || fallbackMessage };
-  }
-  if (error instanceof Error) {
-    return { kind: 'ApiError', message: error.message || fallbackMessage };
-  }
-  return { kind: 'UnknownError', message: fallbackMessage };
-}
-
-// In queryFn:
-async queryFn({ cluster, namespace, name }) {
-  try {
-    const response = await ApiProxy.clusterRequest(/* ... */);
-    const parsed = ServiceSchema.safeParse(response);
-    if (!parsed.success) {
-      return {
-        error: { kind: 'ValidationError', message: 'Invalid Service response' },
-      };
-    }
-    return { data: { ...parsed.data, cluster } };
-  } catch (error) {
-    return { error: toApiError(error, 'Failed to fetch Service') };
-  }
-}
-```
+- **Error handling**
+  - When dealing with Kubernetes API errors, use Headlamp's `ApiError` type (from the plugin SDK) and helpers such as `KubeObject.getErrorMessage(err)` where appropriate.
+  - Components and hooks that fetch data via `KubeObject` should handle loading and error states in the UI and surface user-friendly messages; avoid throwing raw errors from React components.
+  - For multi-cluster calls, handle errors per cluster gracefully so that a failure in one cluster does not break the entire view; follow patterns from the upstream Headlamp code in `refs/headlamp/frontend/src/lib/k8s` and the official plugins under `refs/plugins`.
 
 - **Form implementation**
   - **All forms MUST be implemented using `react-hook-form` with `zod/mini` for validation.**

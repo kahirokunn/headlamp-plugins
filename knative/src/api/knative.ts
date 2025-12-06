@@ -2,6 +2,7 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 import { createEntityAdapter, type EntityState } from '@reduxjs/toolkit';
 import type { BaseQueryFn } from '@reduxjs/toolkit/query';
 import * as ApiProxy from '@kinvolk/headlamp-plugin/lib/ApiProxy';
+import { WebSocketManager } from '@kinvolk/headlamp-plugin/lib/lib/k8s/api/v2/webSocket';
 import * as yaml from 'js-yaml';
 import * as z from 'zod/mini';
 import {
@@ -68,6 +69,17 @@ type KubernetesResource = z.infer<typeof KubernetesResourceSchema>;
 type KubernetesResourceWithCluster = KubernetesResource & ClusterScopedResource;
 
 type KubernetesResourceEntityState = EntityState<KubernetesResourceWithCluster, string>;
+
+const KubernetesResourceListSchema = z.object({
+  metadata: z.optional(
+    z.object({
+      resourceVersion: z.optional(z.string()),
+    })
+  ),
+  items: z.optional(z.array(KubernetesResourceSchema)),
+});
+
+type KubernetesResourceList = z.infer<typeof KubernetesResourceListSchema>;
 
 const kubernetesResourceAdapter = createEntityAdapter<KubernetesResourceWithCluster, string>({
   selectId: resource =>
@@ -522,58 +534,132 @@ export const knativeRtkApi = createApi({
           ? { labelSelector: arg.labelSelector }
           : undefined;
 
-        const cancelStreams: Array<(() => void) | undefined> = [];
+        // Step 1: Perform an initial LIST per cluster to populate state and capture resourceVersion
+        const resourceVersions: Record<string, string | undefined> = {};
 
-        // Open a stream for each cluster
-        for (const cluster of arg.clusters) {
-          try {
-            const cancelStream = await ApiProxy.streamResultsForCluster(
-              path,
-              {
-                cluster,
-                cb: (items: unknown[]) => {
-                  updateCachedData(draft => {
-                    // Remove existing entities for this cluster (by ID prefix)
-                    const allResources = kubernetesResourceSelectors.selectAll(draft);
-                    const otherClusterResources = allResources.filter(
-                      r => !r.cluster || r.cluster !== cluster
-                    );
-                    const newResources: KubernetesResourceWithCluster[] = [];
-                    for (const raw of items) {
-                      if (!isKubernetesResource(raw)) {
-                        continue;
-                      }
-                      newResources.push({
-                        ...raw,
-                        cluster,
-                      });
-                    }
-                    // Set all: other clusters' resources + this cluster's new resources
-                    kubernetesResourceAdapter.setAll(draft, [
-                      ...otherClusterResources,
-                      ...newResources,
-                    ]);
+        await Promise.all(
+          arg.clusters.map(async cluster => {
+            try {
+              const response = await ApiProxy.clusterRequest(
+                path,
+                { method: 'GET', cluster },
+                queryParams
+              );
+              const parsed = KubernetesResourceListSchema.safeParse(response);
+              if (!parsed.success) {
+                resourceVersions[cluster] = undefined;
+                return;
+              }
+
+              const list: KubernetesResourceList = parsed.data;
+              const items = list.items ?? [];
+              const resourceVersion = list.metadata?.resourceVersion;
+              resourceVersions[cluster] = resourceVersion;
+
+              updateCachedData(draft => {
+                const allResources = kubernetesResourceSelectors.selectAll(draft);
+                const otherClusterResources = allResources.filter(r => r.cluster !== cluster);
+
+                const newResources: KubernetesResourceWithCluster[] = [];
+                for (const raw of items) {
+                  if (!isKubernetesResource(raw)) {
+                    continue;
+                  }
+                  newResources.push({
+                    ...raw,
+                    cluster,
                   });
-                },
-                errCb: () => {
-                  // ignore stream errors; consumers can refetch manually
-                },
-              },
-              queryParams
+                }
+
+                kubernetesResourceAdapter.setAll(draft, [
+                  ...otherClusterResources,
+                  ...newResources,
+                ]);
+              });
+            } catch {
+              // Initial LIST failed for this cluster; record no resourceVersion and continue
+              resourceVersions[cluster] = undefined;
+            }
+          })
+        );
+
+        // Step 2: Start watches for each cluster using WebSocketManager and the /wsMultiplexer
+        const unsubscribeFns: Array<() => void> = [];
+
+        for (const cluster of arg.clusters) {
+          const resourceVersion = resourceVersions[cluster];
+
+          const queryObject: Record<string, string> = {};
+          if (queryParams) {
+            for (const [key, value] of Object.entries(queryParams)) {
+              if (value == null) {
+                continue;
+              }
+              queryObject[key] = String(value);
+            }
+          }
+          queryObject.watch = '1';
+          if (resourceVersion) {
+            queryObject.resourceVersion = resourceVersion;
+          }
+
+          const query = new URLSearchParams(queryObject).toString();
+
+          try {
+            const unsubscribe = await WebSocketManager.subscribe(
+              cluster,
+              path,
+              query,
+              (update: unknown) => {
+                if (!update || typeof update !== 'object') {
+                  return;
+                }
+
+                const updateObj = update as {
+                  type?: unknown;
+                  object?: unknown;
+                };
+                const { type, object } = updateObj;
+
+                if (typeof type !== 'string' || !object || !isKubernetesResource(object)) {
+                  return;
+                }
+
+                const resource: KubernetesResourceWithCluster = {
+                  ...object,
+                  cluster,
+                };
+
+                updateCachedData(draft => {
+                  switch (type) {
+                    case 'ADDED':
+                    case 'MODIFIED':
+                      kubernetesResourceAdapter.upsertOne(draft, resource);
+                      break;
+                    case 'DELETED':
+                      kubernetesResourceAdapter.removeOne(
+                        draft,
+                        kubernetesResourceAdapter.selectId(resource)
+                      );
+                      break;
+                    default:
+                      // Ignore ERROR and other event types
+                      break;
+                  }
+                });
+              }
             );
-            cancelStreams.push(cancelStream);
+
+            unsubscribeFns.push(unsubscribe);
           } catch {
-            // ignore stream setup errors for individual clusters
-            cancelStreams.push(undefined);
+            // Ignore watch setup errors for individual clusters
           }
         }
 
+        // Step 3: When the cache entry is removed, unsubscribe from all watches
         await cacheEntryRemoved;
-        // Cancel all streams
-        for (const cancelStream of cancelStreams) {
-          if (cancelStream) {
-            cancelStream();
-          }
+        for (const unsubscribe of unsubscribeFns) {
+          unsubscribe();
         }
       },
     }),
