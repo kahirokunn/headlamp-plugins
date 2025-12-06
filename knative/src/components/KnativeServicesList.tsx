@@ -489,6 +489,7 @@ export default function KnativeServicesList() {
           onCreated={() => {
             // RTK Query will automatically refetch via cache invalidation
           }}
+          cluster={clusters[0] || ''}
         />
       )}
     </Stack>

@@ -3,7 +3,6 @@ import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material'
 import type { KnativeService } from '../types/knative';
 import { useNotify } from './common/notifications/useNotify';
 import { useUpdateAutoscalingSettingsMutation } from '../api/knativeRtkApi';
-import { useClusters } from '../hooks/useClusters';
 
 type AutoscalingDefaults = {
   concurrencyTarget: number;
@@ -26,15 +25,15 @@ export default function ScaleBoundsSection({
   service,
   defaults,
   onSaved,
+  cluster,
 }: {
   namespace: string;
   name: string;
   service: KnativeService;
   defaults: AutoscalingDefaults | null;
   onSaved?: () => void;
+  cluster: string;
 }) {
-  const clusters = useClusters();
-  const cluster = clusters[0] || '';
   const [updateAutoscalingSettings, { isLoading: saving }] = useUpdateAutoscalingSettingsMutation();
   const anns = service?.spec?.template?.metadata?.annotations ?? {};
 

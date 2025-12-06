@@ -6,6 +6,7 @@ type IngressIntegrationsSectionProps = {
   serviceName: string;
   ingressClass: string | null;
   ingressClassLoaded: boolean;
+  cluster: string;
 };
 
 /**
@@ -21,6 +22,7 @@ export default function IngressIntegrationsSection({
   serviceName,
   ingressClass,
   ingressClassLoaded,
+  cluster,
 }: IngressIntegrationsSectionProps) {
   // Only render when ingress class is loaded
   if (!ingressClassLoaded) {
@@ -29,7 +31,13 @@ export default function IngressIntegrationsSection({
 
   switch (ingressClass) {
     case INGRESS_CLASS_GATEWAY_API:
-      return <GatewayApiIngressSection namespace={namespace} serviceName={serviceName} />;
+      return (
+        <GatewayApiIngressSection
+          namespace={namespace}
+          serviceName={serviceName}
+          cluster={cluster}
+        />
+      );
 
     // Future: Add other ingress providers here
     // case INGRESS_CLASS_CONTOUR:

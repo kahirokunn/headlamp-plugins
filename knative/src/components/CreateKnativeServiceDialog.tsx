@@ -20,7 +20,6 @@ import {
   useCreateServiceMutation,
   useFetchIngressClassQuery,
 } from '../api/knativeRtkApi';
-import { useClusters } from '../hooks/useClusters';
 import {
   createIpAccessSecurityPolicy,
   createSecurityPolicyForHTTPRoute,
@@ -33,6 +32,7 @@ import IngressSecuritySection from './IngressSecuritySection';
 type Props = {
   onClose: () => void;
   onCreated?: () => void;
+  cluster: string;
 };
 
 type EnvRow = { key: string; value: string; id: string };
@@ -72,9 +72,8 @@ const validateCidrs = (allow: string[], deny: string[]): string | null => {
   return null;
 };
 
-export default function CreateKnativeServiceDialog({ onClose, onCreated }: Props) {
-  const clusters = useClusters();
-  const cluster = clusters[0] || '';
+export default function CreateKnativeServiceDialog({ onClose, onCreated, cluster }: Props) {
+  const clusters = [cluster];
   const [namespace, setNamespace] = React.useState<string>('');
   const [name, setName] = React.useState<string>('');
   const [image, setImage] = React.useState<string>('');

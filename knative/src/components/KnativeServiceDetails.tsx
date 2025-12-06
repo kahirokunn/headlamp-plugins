@@ -1,6 +1,5 @@
 import React from 'react';
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
-import type { KnativeRevision, KnativeService } from '../types/knative';
 import {
   useGetServiceQuery,
   useWatchKnativeRevisions,
@@ -9,9 +8,8 @@ import {
   useFetchAutoscalingGlobalDefaultsQuery,
   useFetchIngressClassQuery,
 } from '../api/knativeRtkApi';
-import { useClusters } from '../hooks/useClusters';
+import type { KnativeRevision } from '../types/knative';
 import { useNotify } from './common/notifications/useNotify';
-import { useParams } from 'react-router-dom';
 import AutoscalingSettings from './AutoscalingSettings';
 import ScaleBoundsSection from './ScaleBoundsSection';
 import ConditionsSection from './ConditionsSection';
@@ -21,26 +19,23 @@ import DomainMappingSection from './DomainMappingSection';
 import IngressIntegrationsSection from './IngressIntegrationsSection';
 import { INGRESS_CLASS_GATEWAY_API, formatIngressClass } from '../config/ingress';
 
+export type KnativeServiceDetailsProps = {
+  namespace: string;
+  name: string;
+  cluster: string;
+};
+
 export default function KnativeServiceDetails({
-  namespace: namespaceProp,
-  name: nameProp,
-  cluster: clusterProp,
-}: {
-  namespace?: string;
-  name?: string;
-  cluster?: string;
-}) {
-  const params = useParams<{ namespace: string; name: string }>();
-  const namespace = namespaceProp ?? params.namespace ?? '';
-  const name = nameProp ?? params.name ?? '';
-  const clustersFromHook = useClusters();
-  const clusters = clusterProp ? [clusterProp] : clustersFromHook;
-  const cluster = clusterProp ?? clustersFromHook[0] ?? '';
+  namespace,
+  name,
+  cluster,
+}: KnativeServiceDetailsProps) {
+  const clusters = [cluster];
   const [acting, setActing] = React.useState<string | null>(null);
   const { notifyError, notifyInfo } = useNotify();
 
   const {
-    data: serviceData,
+    data: kservice,
     error: serviceError,
     isLoading: serviceLoading,
     refetch: refetchService,
@@ -70,31 +65,27 @@ export default function KnativeServiceDetails({
   const [redeployService] = useRedeployServiceMutation();
   const [restartService] = useRestartServiceMutation();
 
-  const svc = React.useMemo(() => {
-    if (!serviceData) return null;
-    // Remove cluster field for compatibility
-    const { cluster: _, ...service } = serviceData;
-    return service;
-  }, [serviceData]);
-
-  const revs = React.useMemo(() => {
-    if (!revisionsData) return null;
-    // Remove cluster field for compatibility
-    return revisionsData.map(({ cluster: _, ...rev }) => rev);
+  const revs: KnativeRevision[] | null = React.useMemo(() => {
+    if (!revisionsData) {
+      return null;
+    }
+    // Remove cluster field for compatibility with components that expect plain KnativeRevision
+    return revisionsData.map(({ cluster: _cluster, ...rest }) => rest);
   }, [revisionsData]);
 
   const autoDefaults = React.useMemo(() => {
     if (!autoDefaultsData || autoDefaultsData.length === 0) return null;
-    // Use the first cluster's defaults
-    const { cluster: _, ...defaults } = autoDefaultsData[0];
+    const match = autoDefaultsData.find(d => d.cluster === cluster);
+    if (!match) return null;
+    const { cluster: _cluster, ...defaults } = match;
     return defaults;
-  }, [autoDefaultsData]);
+  }, [autoDefaultsData, cluster]);
 
   const ingressClass = React.useMemo(() => {
     if (!ingressClassData || ingressClassData.length === 0) return null;
-    // Use the first cluster's ingress class
-    return ingressClassData[0]?.ingressClass ?? null;
-  }, [ingressClassData]);
+    const match = ingressClassData.find(d => d.cluster === cluster);
+    return match?.ingressClass ?? null;
+  }, [ingressClassData, cluster]);
 
   const error = React.useMemo(() => {
     if (serviceError) {
@@ -106,13 +97,10 @@ export default function KnativeServiceDetails({
     return null;
   }, [serviceError, revisionsError]);
 
-  const ready = React.useMemo(
-    () => svc?.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True',
-    [svc]
-  );
+  const ready = kservice?.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True';
 
   async function handleRedeploy() {
-    if (!svc || !cluster) return;
+    if (!kservice || !cluster) return;
     setActing('redeploy');
     try {
       await redeployService({ cluster, namespace, name }).unwrap();
@@ -128,10 +116,10 @@ export default function KnativeServiceDetails({
   }
 
   async function handleRestart() {
-    if (!svc || !cluster) return;
+    if (!kservice || !cluster) return;
     setActing('restart');
     try {
-      await restartService({ cluster, namespace, service: svc }).unwrap();
+      await restartService({ cluster, namespace, service: kservice }).unwrap();
       notifyInfo('Restart requested');
       refetchService();
     } catch (err: unknown) {
@@ -151,7 +139,7 @@ export default function KnativeServiceDetails({
     );
   }
 
-  if (serviceLoading || revisionsLoading || !svc || !revs) {
+  if (serviceLoading || revisionsLoading || !kservice || !revs) {
     return (
       <Box p={4} display="flex" justifyContent="center" alignItems="center">
         <CircularProgress />
@@ -179,8 +167,8 @@ export default function KnativeServiceDetails({
         </Alert>
       )}
       <ServiceHeader
-        serviceName={svc.metadata.name}
-        namespace={svc.metadata.namespace ?? namespace}
+        serviceName={kservice.metadata.name}
+        namespace={kservice.metadata.namespace ?? namespace}
         cluster={cluster}
         ready={!!ready}
         acting={acting}
@@ -194,31 +182,34 @@ export default function KnativeServiceDetails({
         </Typography>
       )}
 
-      <ConditionsSection title="Conditions" conditions={svc.status?.conditions} />
+      <ConditionsSection title="Conditions" conditions={kservice.status?.conditions} />
 
       <TrafficSplittingSection
+        cluster={cluster}
         namespace={namespace}
         name={name}
-        service={svc}
+        service={kservice}
         revisions={revs}
         onSaved={() => {
           refetchService();
         }}
       />
 
-      <DomainMappingSection namespace={namespace} serviceName={name} />
+      <DomainMappingSection namespace={namespace} serviceName={name} cluster={cluster} />
 
       <IngressIntegrationsSection
         namespace={namespace}
         serviceName={name}
         ingressClass={ingressClass}
         ingressClassLoaded={ingressClassSuccess}
+        cluster={cluster}
       />
 
       <AutoscalingSettings
         namespace={namespace}
         name={name}
-        service={svc}
+        cluster={cluster}
+        service={kservice}
         defaults={autoDefaults}
         onSaved={() => {
           refetchService();
@@ -228,8 +219,9 @@ export default function KnativeServiceDetails({
       <ScaleBoundsSection
         namespace={namespace}
         name={name}
-        service={svc}
+        service={kservice}
         defaults={autoDefaults}
+        cluster={cluster}
         onSaved={() => {
           refetchService();
         }}

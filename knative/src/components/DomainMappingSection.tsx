@@ -6,20 +6,18 @@ import {
   useCreateDomainMappingMutation,
   useDeleteDomainMappingMutation,
   useCreateClusterDomainClaimMutation,
-  useGetClusterDomainClaimQuery,
   useAnnotateDomainMappingMutation,
 } from '../api/knativeRtkApi';
-import { useClusters } from '../hooks/useClusters';
 import { useNotify } from './common/notifications/useNotify';
 
 type Props = {
   namespace: string;
   serviceName: string;
+  cluster: string;
 };
 
-export default function DomainMappingSection({ namespace, serviceName }: Props) {
-  const clusters = useClusters();
-  const cluster = clusters[0] || '';
+export default function DomainMappingSection({ namespace, serviceName, cluster }: Props) {
+  const clusters = [cluster];
   const { notifyError, notifyInfo } = useNotify();
   const [creating, setCreating] = React.useState<boolean>(false);
   const [domainInput, setDomainInput] = React.useState<string>('');

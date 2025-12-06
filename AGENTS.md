@@ -265,6 +265,9 @@ function CreateServiceForm() {
   - For **resource list views** (tables showing K8s/Knative resources), always include a **`Cluster` column** whose value is the resource's origin cluster.
     - The `Cluster` column should only be **rendered when there are two or more clusters** (e.g. `const showClusterColumn = clusters.length > 1` and conditionally render the header and cells).
     - Sorting by `Cluster` should be supported when the column is present.
+  - **Never select an arbitrary cluster by index** (for example, do **not** use `clusters[0]` as the active cluster). Instead, either:
+    - Use an explicit cluster identifier from route parameters or component props, or
+    - Iterate over all clusters returned by `useClusters()` and handle them explicitly (for example, by aggregating results or rendering per-cluster sections).
   - Example:
 
 ```ts

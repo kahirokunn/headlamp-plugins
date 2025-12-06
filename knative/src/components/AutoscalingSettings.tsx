@@ -15,7 +15,6 @@ import {
 import type { KnativeService } from '../types/knative';
 import { useNotify } from './common/notifications/useNotify';
 import { useUpdateAutoscalingSettingsMutation } from '../api/knativeRtkApi';
-import { useClusters } from '../hooks/useClusters';
 
 type MetricType = '' | 'concurrency' | 'rps';
 
@@ -37,18 +36,18 @@ type AutoscalingDefaults = {
 export default function AutoscalingSettings({
   namespace,
   name,
+  cluster,
   service,
   defaults,
   onSaved,
 }: {
   namespace: string;
   name: string;
+  cluster: string;
   service: KnativeService;
   defaults: AutoscalingDefaults | null;
   onSaved?: () => void;
 }) {
-  const clusters = useClusters();
-  const cluster = clusters[0] || '';
   const [updateAutoscalingSettings, { isLoading: saving }] = useUpdateAutoscalingSettingsMutation();
   const anns = service?.spec?.template?.metadata?.annotations ?? {};
   const templateSpec = (service?.spec?.template?.spec as Record<string, unknown>) ?? {};

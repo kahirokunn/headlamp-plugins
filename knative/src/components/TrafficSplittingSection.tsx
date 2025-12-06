@@ -16,10 +16,10 @@ import {
 } from '@mui/material';
 import type { KnativeRevision, KnativeService, TrafficTarget } from '../types/knative';
 import { getAge, useUpdateTrafficMutation } from '../api/knativeRtkApi';
-import { useClusters } from '../hooks/useClusters';
 import { useNotify } from './common/notifications/useNotify';
 
 type Props = {
+  cluster: string;
   namespace: string;
   name: string;
   service: KnativeService;
@@ -28,13 +28,13 @@ type Props = {
 };
 
 export default function TrafficSplittingSection({
+  cluster,
   namespace,
   name,
   service,
   revisions,
   onSaved,
 }: Props) {
-  const clusters = useClusters();
   const [updateTraffic, { isLoading: savingTraffic }] = useUpdateTrafficMutation();
   const [revPercents, setRevPercents] = React.useState<Record<string, number>>({});
   const [revTags, setRevTags] = React.useState<Record<string, string[]>>({});
@@ -152,7 +152,6 @@ export default function TrafficSplittingSection({
 
   async function onSaveTraffic() {
     if (!service || !revisions) return;
-    setSavingTraffic(true);
     try {
       // 1) Build a merged result that includes in-progress (unconfirmed) tag input
       const mergedRevTags: Record<string, string[]> = {};
@@ -265,8 +264,6 @@ export default function TrafficSplittingSection({
         });
       });
 
-      // Use the first cluster (or handle multiple clusters if needed)
-      const cluster = clusters[0];
       if (!cluster) {
         notifyError('No cluster available');
         return;
