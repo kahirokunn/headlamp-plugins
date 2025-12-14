@@ -13,30 +13,28 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { ResourceClasses } from '@kinvolk/headlamp-plugin/lib/k8s';
 import { ValidationAlert } from '../common/ValidationAlert';
 import { useNotify } from '../common/notifications/useNotify';
-import {
-  createSecurityPolicyForHTTPRoute,
-  detectBasicAuthConfig,
-  upsertBasicAuthSecret,
-} from '../../api/envoy';
-import { disableBasicAuthForHTTPRoute } from '../../api/envoy';
+import { SecurityPolicy } from '../../resources/envoyGateway/securityPolicy';
+import { buildHttpRouteOwnerRefFromRoute, findSecurityPolicyForHTTPRoute } from './common';
+import type { KubeHTTPRoute } from '@kinvolk/headlamp-plugin/lib/lib/k8s/httpRoute';
 
-export default function BasicAuthSection({
-  namespace,
-  host,
-  onChanged,
+const { Secret } = ResourceClasses;
+
+type ApiResult = {
+  isSuccess: boolean;
+  errorMessage?: string;
+};
+
+export function BasicAuthSection({
+  cluster,
+  httpRoute,
 }: {
-  namespace: string;
-  host: string;
-  onChanged?: () => void;
+  cluster: string;
+  httpRoute: KubeHTTPRoute;
 }) {
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [httpRouteName, setHttpRouteName] = React.useState<string | null>(null);
-  const [policyName, setPolicyName] = React.useState<string | null>(null);
-  const [secretName, setSecretName] = React.useState<string | null>(null);
-  const [usernames, setUsernames] = React.useState<string[]>([]);
+  const [acting, setActing] = React.useState(false);
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
 
   const [openEnable, setOpenEnable] = React.useState(false);
@@ -49,47 +47,111 @@ export default function BasicAuthSection({
 
   const { notifySuccess, notifyError } = useNotify();
 
-  async function refresh() {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await detectBasicAuthConfig(namespace, host);
-      setHttpRouteName(result.httpRoute?.metadata?.name ?? null);
-      setPolicyName(result.securityPolicy?.metadata?.name ?? null);
-      setSecretName(result.secretName);
-      setUsernames(result.usernames);
-      if (result.secretName) setFormSecretName(result.secretName);
-      if (result.usernames?.length) setFormUsername(result.usernames[0]);
-    } catch (e) {
-      setError((e as Error)?.message || 'Failed to detect Basic Auth config');
-    } finally {
-      setLoading(false);
-    }
+  const namespace = httpRoute.metadata?.namespace;
+
+  if (!namespace) {
+    return (
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Typography variant="body2" color="error">
+          HTTPRoute namespace is not available
+        </Typography>
+      </Paper>
+    );
   }
 
-  React.useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace, host]);
+  const securityPolicyListResult = SecurityPolicy.useList({ cluster, namespace });
 
-  const configured = !!(httpRouteName && secretName);
+  const securityPolicies = securityPolicyListResult.items ?? [];
+
+  const httpRouteName = httpRoute.metadata?.name ?? null;
+
+  const securityPolicy = React.useMemo(
+    () => (httpRouteName ? findSecurityPolicyForHTTPRoute(securityPolicies, httpRouteName) : null),
+    [securityPolicies, httpRouteName]
+  );
+
+  const basicAuthSecretName = securityPolicy?.spec?.basicAuth?.users?.name ?? null;
+
+  const secretCluster = cluster;
+
+  const secretNameForQuery =
+    basicAuthSecretName ?? '__headlamp_envoygateway_basic_auth_placeholder_secret__';
+  const secretQuery = Secret.useGet(secretNameForQuery, namespace, { cluster: secretCluster });
+  const [secret, secretError] = secretQuery;
+
+  const secretIs404 =
+    !!basicAuthSecretName && !!secretError && (secretError as { status?: number }).status === 404;
+
+  const enableSecretNameForQuery =
+    openEnable && formSecretName
+      ? formSecretName
+      : '__headlamp_envoygateway_basic_auth_enable_placeholder_secret__';
+  const enableSecretQuery = Secret.useGet(enableSecretNameForQuery, namespace, {
+    cluster: secretCluster,
+  });
+  const [enableSecret, enableSecretError] = enableSecretQuery;
+
+  const enableSecretIs404 =
+    openEnable &&
+    !!formSecretName &&
+    !!enableSecretError &&
+    (enableSecretError as { status?: number }).status === 404;
+
+  const usernames = React.useMemo(
+    () =>
+      basicAuthSecretName && !secretIs404 && secret ? readHtpasswdUsernamesFromSecret(secret) : [],
+    [basicAuthSecretName, secretIs404, secret]
+  );
+
+  React.useEffect(() => {
+    if (openEnable || openEdit) {
+      return;
+    }
+
+    if (basicAuthSecretName) {
+      setFormSecretName(basicAuthSecretName);
+    } else {
+      setFormSecretName('basic-auth');
+    }
+
+    if (usernames.length > 0) {
+      setFormUsername(usernames[0]);
+    } else {
+      setFormUsername('');
+    }
+
+    setFormPassword('');
+  }, [basicAuthSecretName, usernames, openEnable, openEdit, namespace]);
+
+  const configured = !!(httpRouteName && basicAuthSecretName);
+  const dataLoading =
+    securityPolicyListResult.isLoading || (basicAuthSecretName ? secretQuery.isLoading : false);
+  const loading = acting || dataLoading;
+
+  const error =
+    (securityPolicyListResult.error as { message?: string } | null)?.message ??
+    (basicAuthSecretName && !secretIs404
+      ? (secretError as { message?: string } | null)?.message ?? null
+      : null);
 
   async function handleEnableSave() {
-    if (!httpRouteName) return;
+    if (!httpRoute || !httpRouteName || !namespace) return;
     if (!formUsername || !formPassword || !formSecretName) {
       setValidationErrors(['Please enter a username, password, and secret name']);
       return;
     }
     setValidationErrors([]);
     try {
-      setLoading(true);
-      const upsertResult = await upsertBasicAuthSecret(
+      setActing(true);
+      const upsertResult = await upsertBasicAuthSecretForRoute({
+        cluster,
         namespace,
-        formSecretName,
-        formUsername,
-        formPassword,
-        httpRouteName
-      );
+        secretName: formSecretName,
+        username: formUsername,
+        password: formPassword,
+        httpRoute,
+        existingSecret: enableSecretIs404 ? null : enableSecret ?? null,
+      });
       if (!upsertResult.isSuccess) {
         notifyError(
           upsertResult.errorMessage
@@ -98,17 +160,17 @@ export default function BasicAuthSection({
         );
         return;
       }
-      await createSecurityPolicyForHTTPRoute({
+      await createOrUpdateSecurityPolicyForHTTPRoute({
+        cluster,
         namespace,
         policyName: httpRouteName,
-        httpRouteName,
+        httpRoute,
         secretName: formSecretName,
+        existingSecurityPolicy: securityPolicy ?? null,
       });
       notifySuccess('Basic authentication enabled');
       setOpenEnable(false);
       setValidationErrors([]);
-      await refresh();
-      onChanged?.();
       setFormPassword('');
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
@@ -118,16 +180,21 @@ export default function BasicAuthSection({
           : 'Failed to enable Basic authentication'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
   async function handleDelete() {
-    if (!httpRouteName) return;
+    if (!httpRouteName || !namespace) return;
     if (!window.confirm('Disable Basic authentication?')) return;
     try {
-      setLoading(true);
-      const result = await disableBasicAuthForHTTPRoute({ namespace, httpRouteName });
+      setActing(true);
+      const result = await disableBasicAuthForHTTPRoute({
+        cluster,
+        namespace,
+        httpRouteName,
+        existingSecurityPolicy: securityPolicy ?? null,
+      });
       if (!result.isSuccess) {
         notifyError(
           result.errorMessage
@@ -139,8 +206,6 @@ export default function BasicAuthSection({
       notifySuccess('Basic authentication disabled');
       setOpenEdit(false);
       setValidationErrors([]);
-      await refresh();
-      onChanged?.();
       setFormPassword('');
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
@@ -150,27 +215,29 @@ export default function BasicAuthSection({
           : 'Failed to disable Basic authentication'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
   async function handleEditSave() {
-    if (!secretName) return;
-    if (!httpRouteName) return;
+    if (!basicAuthSecretName) return;
+    if (!httpRoute || !namespace) return;
     if (!formUsername || !formPassword) {
       setValidationErrors(['Please enter a username and new password']);
       return;
     }
     setValidationErrors([]);
     try {
-      setLoading(true);
-      const result = await upsertBasicAuthSecret(
+      setActing(true);
+      const result = await upsertBasicAuthSecretForRoute({
+        cluster,
         namespace,
-        secretName,
-        formUsername,
-        formPassword,
-        httpRouteName
-      );
+        secretName: basicAuthSecretName,
+        username: formUsername,
+        password: formPassword,
+        httpRoute,
+        existingSecret: secretIs404 ? null : secret ?? null,
+      });
       if (!result.isSuccess) {
         notifyError(
           result.errorMessage
@@ -182,8 +249,6 @@ export default function BasicAuthSection({
       notifySuccess('Basic authentication credentials updated');
       setOpenEdit(false);
       setValidationErrors([]);
-      await refresh();
-      onChanged?.();
       setFormPassword('');
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
@@ -193,7 +258,7 @@ export default function BasicAuthSection({
           : 'Failed to update Basic authentication'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
@@ -220,7 +285,7 @@ export default function BasicAuthSection({
         <Stack spacing={1}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Host:</Typography>
-            <Typography variant="body2">{host || '-'}</Typography>
+            <Typography variant="body2">{httpRoute.spec?.hostnames?.[0] || '-'}</Typography>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">HTTPRoute:</Typography>
@@ -228,7 +293,7 @@ export default function BasicAuthSection({
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Secret:</Typography>
-            <Typography variant="body2">{secretName || '-'}</Typography>
+            <Typography variant="body2">{basicAuthSecretName || '-'}</Typography>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Usernames:</Typography>
@@ -249,7 +314,7 @@ export default function BasicAuthSection({
               onClick={() => {
                 setFormUsername(usernames[0] || '');
                 setFormPassword('');
-                setFormSecretName(secretName || 'basic-auth');
+                setFormSecretName(basicAuthSecretName || 'basic-auth');
                 setValidationErrors([]);
                 setOpenEnable(true);
               }}
@@ -347,7 +412,7 @@ export default function BasicAuthSection({
             <ValidationAlert errors={validationErrors} sx={{ mb: 1 }} />
             <TextField
               label="Secret Name"
-              value={secretName || ''}
+              value={basicAuthSecretName || ''}
               size="small"
               fullWidth
               disabled
@@ -385,4 +450,211 @@ export default function BasicAuthSection({
       </Dialog>
     </Paper>
   );
+}
+
+function decodeBase64ToString(data: string): string {
+  if (typeof atob === 'function') {
+    return atob(data);
+  }
+  return Buffer.from(data, 'base64').toString('utf8');
+}
+
+function readHtpasswdUsernamesFromSecret(secret: InstanceType<typeof Secret>): string[] {
+  const encoded = secret?.data?.['.htpasswd'];
+  if (!encoded) {
+    return [];
+  }
+
+  try {
+    const decoded = decodeBase64ToString(encoded);
+    const lines = decoded.split(/\r?\n/).filter(Boolean);
+    const users: string[] = [];
+    for (const line of lines) {
+      const idx = line.indexOf(':');
+      if (idx > 0) {
+        users.push(line.slice(0, idx));
+      }
+    }
+    return users;
+  } catch {
+    return [];
+  }
+}
+
+function base64Encode(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    bin += String.fromCharCode(bytes[i]);
+  }
+  if (typeof btoa === 'function') {
+    return btoa(bin);
+  }
+  return Buffer.from(bytes).toString('base64');
+}
+
+function encodeStringToBase64(data: string): string {
+  if (typeof btoa === 'function') {
+    return btoa(data);
+  }
+  return Buffer.from(data, 'utf8').toString('base64');
+}
+
+async function sha1Base64(input: string): Promise<string> {
+  const enc = new TextEncoder();
+  const data = enc.encode(input);
+
+  if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
+    const digest = await crypto.subtle.digest('SHA-1', data);
+    return base64Encode(new Uint8Array(digest));
+  }
+
+  // Node / non-browser fallback
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const nodeCrypto = require('crypto') as typeof import('crypto');
+  const hash = nodeCrypto.createHash('sha1').update(Buffer.from(data)).digest();
+  return hash.toString('base64');
+}
+
+async function buildHtpasswdLine(username: string, password: string): Promise<string> {
+  const b64 = await sha1Base64(password);
+  return `${username}:{SHA}${b64}`;
+}
+
+async function upsertBasicAuthSecretForRoute(params: {
+  cluster: string;
+  namespace: string;
+  secretName: string;
+  username: string;
+  password: string;
+  httpRoute: KubeHTTPRoute;
+  existingSecret?: InstanceType<typeof Secret> | null;
+}): Promise<ApiResult> {
+  const { cluster, namespace, secretName, username, password, httpRoute, existingSecret } = params;
+
+  try {
+    const dataB64 = encodeStringToBase64(await buildHtpasswdLine(username, password));
+
+    const existingJson = existingSecret?.jsonData;
+
+    if (!existingJson) {
+      const ownerRef = buildHttpRouteOwnerRefFromRoute(httpRoute);
+      const body = Secret.getBaseObject();
+      body.metadata.name = secretName;
+      body.metadata.namespace = namespace;
+      if (ownerRef) {
+        body.metadata.ownerReferences = [ownerRef];
+      }
+      body.type = 'Opaque';
+      body.data = { '.htpasswd': dataB64 };
+      await Secret.apiEndpoint.post(body, {}, cluster);
+    } else {
+      await Secret.apiEndpoint.put(
+        {
+          ...existingJson,
+          data: {
+            ...(existingJson.data ?? {}),
+            '.htpasswd': dataB64,
+          },
+          type: 'Opaque',
+        },
+        {},
+        cluster
+      );
+    }
+
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
+}
+
+async function createOrUpdateSecurityPolicyForHTTPRoute(params: {
+  cluster: string;
+  namespace: string;
+  policyName: string;
+  httpRoute: KubeHTTPRoute;
+  secretName: string;
+  existingSecurityPolicy: SecurityPolicy | null;
+}): Promise<void> {
+  const { cluster, namespace, policyName, httpRoute, secretName, existingSecurityPolicy } = params;
+
+  if (existingSecurityPolicy?.jsonData?.metadata?.name) {
+    await SecurityPolicy.apiEndpoint.put(
+      {
+        ...existingSecurityPolicy.jsonData,
+        spec: {
+          ...(existingSecurityPolicy.spec ?? {}),
+          basicAuth: {
+            users: {
+              name: secretName,
+            },
+          },
+        },
+      },
+      {},
+      cluster
+    );
+  }
+
+  const ownerRef = buildHttpRouteOwnerRefFromRoute(httpRoute);
+
+  await SecurityPolicy.apiEndpoint.post(
+    {
+      apiVersion: 'gateway.envoyproxy.io/v1alpha1',
+      kind: 'SecurityPolicy',
+      metadata: {
+        name: policyName,
+        namespace,
+        ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+      },
+      spec: {
+        targetRefs: [
+          {
+            group: 'gateway.networking.k8s.io',
+            kind: 'HTTPRoute',
+            name: httpRoute.metadata.name!,
+          },
+        ],
+        basicAuth: {
+          users: {
+            name: secretName,
+          },
+        },
+      },
+    },
+    {},
+    cluster
+  );
+}
+
+async function disableBasicAuthForHTTPRoute(params: {
+  cluster: string;
+  namespace: string;
+  httpRouteName: string;
+  existingSecurityPolicy: SecurityPolicy | null;
+}): Promise<ApiResult> {
+  try {
+    const existing = params.existingSecurityPolicy?.jsonData;
+    if (!existing?.metadata?.name) {
+      return { isSuccess: true };
+    }
+    console.log('確認 existing', existing);
+
+    await SecurityPolicy.apiEndpoint.put(
+      {
+        ...existing,
+        spec: {
+          ...(existing.spec ?? {}),
+          basicAuth: null,
+        },
+      },
+      {},
+      params.cluster
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }

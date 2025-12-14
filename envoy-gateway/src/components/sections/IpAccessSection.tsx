@@ -16,28 +16,23 @@ import {
 } from '@mui/material';
 import { ValidationAlert } from '../common/ValidationAlert';
 import { useNotify } from '../common/notifications/useNotify';
-import {
-  createIpAccessSecurityPolicy,
-  detectIpAccessConfig,
-  updateIpAccessSecurityPolicy,
-} from '../../api/envoy';
-import { disableIpAccessSecurityPolicy } from '../../api/envoy';
+import { SecurityPolicy } from '../../resources/envoyGateway/securityPolicy';
+import { buildHttpRouteOwnerRefFromRoute, findSecurityPolicyForHTTPRoute } from './common';
+import HTTPRoute, { KubeHTTPRoute } from '@kinvolk/headlamp-plugin/lib/lib/k8s/httpRoute';
 
-export default function IpAccessSection({
-  namespace,
-  host,
-  onChanged,
+type ApiResult = {
+  isSuccess: boolean;
+  errorMessage?: string;
+};
+
+export function IpAccessSection({
+  cluster,
+  httpRoute,
 }: {
-  namespace: string;
-  host: string;
-  onChanged?: () => void;
+  cluster: string;
+  httpRoute: KubeHTTPRoute;
 }) {
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [httpRouteName, setHttpRouteName] = React.useState<string | null>(null);
-  const [policyName, setPolicyName] = React.useState<string | null>(null);
-  const [allowCidrs, setAllowCidrs] = React.useState<string[]>([]);
-  const [denyCidrs, setDenyCidrs] = React.useState<string[]>([]);
+  const [acting, setActing] = React.useState(false);
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
 
   // Form dialogs
@@ -137,31 +132,42 @@ export default function IpAccessSection({
     }
   }
 
-  async function refresh() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await detectIpAccessConfig(namespace, host);
-      setHttpRouteName(res.httpRoute?.metadata?.name ?? null);
-      setPolicyName(res.securityPolicy?.metadata?.name ?? null);
-      setAllowCidrs(res.allowCidrs || []);
-      setDenyCidrs(res.denyCidrs || []);
-    } catch (e) {
-      setError((e as Error)?.message || 'Failed to detect IP access config');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const namespace = httpRoute.metadata.namespace!;
 
-  React.useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace, host]);
+  const securityPolicyListResult = SecurityPolicy.useList({ cluster, namespace });
+
+  const securityPolicies = securityPolicyListResult.items ?? [];
+
+  const httpRouteName = httpRoute.metadata.name ?? null;
+
+  const securityPolicy = React.useMemo(
+    () => (httpRouteName ? findSecurityPolicyForHTTPRoute(securityPolicies, httpRouteName) : null),
+    [securityPolicies, httpRouteName]
+  );
+
+  const policyName = securityPolicy?.metadata?.name ?? null;
+
+  const rules: any[] = (securityPolicy as any)?.spec?.authorization?.rules ?? [];
+  const allowCidrs =
+    rules
+      ?.filter((r: any) => String(r?.action) === 'Allow')
+      ?.flatMap((r: any) => r?.principal?.clientCIDRs || [])
+      ?.filter(Boolean) ?? [];
+  const denyCidrs =
+    rules
+      ?.filter((r: any) => String(r?.action) === 'Deny')
+      ?.flatMap((r: any) => r?.principal?.clientCIDRs || [])
+      ?.filter(Boolean) ?? [];
 
   const configured = allowCidrs.length > 0 || denyCidrs.length > 0;
 
+  const dataLoading = securityPolicyListResult.isLoading;
+  const loading = acting || dataLoading;
+
+  const error = (securityPolicyListResult.error as { message?: string } | null)?.message ?? null;
+
   async function handleEnable() {
-    if (!httpRouteName) return;
+    if (!httpRoute || !httpRouteName) return;
     const a = sanitizeList(formAllowCidrs);
     const d = sanitizeList(formDenyCidrs);
     const err = validateLists(a, d);
@@ -171,20 +177,19 @@ export default function IpAccessSection({
     }
     setValidationErrors([]);
     try {
-      setLoading(true);
-      const created = await createIpAccessSecurityPolicy({
+      setActing(true);
+      await createOrUpdateIpAccessSecurityPolicyForRoute({
+        cluster,
         namespace,
         policyName: httpRouteName,
-        httpRouteName,
+        httpRoute,
         allowCidrs: a,
         denyCidrs: d,
+        existingSecurityPolicy: securityPolicy ?? null,
       });
       notifySuccess('IP access control enabled');
       setOpenEnable(false);
       setValidationErrors([]);
-      setPolicyName(created.metadata.name);
-      await refresh();
-      onChanged?.();
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
@@ -193,12 +198,12 @@ export default function IpAccessSection({
           : 'Failed to enable IP access control'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
   async function handleSave() {
-    if (!policyName) return;
+    if (!policyName || !securityPolicy) return;
     const a = sanitizeList(formAllowCidrs);
     const d = sanitizeList(formDenyCidrs);
     const err = validateLists(a, d);
@@ -208,10 +213,11 @@ export default function IpAccessSection({
     }
     setValidationErrors([]);
     try {
-      setLoading(true);
-      const result = await updateIpAccessSecurityPolicy({
+      setActing(true);
+      const result = await updateIpAccessSecurityPolicyForRoute({
+        cluster,
         namespace,
-        policyName,
+        securityPolicy,
         allowCidrs: a,
         denyCidrs: d,
       });
@@ -226,8 +232,6 @@ export default function IpAccessSection({
       notifySuccess('IP access control updated');
       setOpenEdit(false);
       setValidationErrors([]);
-      await refresh();
-      onChanged?.();
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
@@ -236,16 +240,20 @@ export default function IpAccessSection({
           : 'Failed to update IP access control'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
   async function handleDelete() {
-    if (!policyName) return;
+    if (!policyName || !securityPolicy) return;
     if (!window.confirm('Delete all IP access rules?')) return;
     try {
-      setLoading(true);
-      const result = await disableIpAccessSecurityPolicy({ namespace, policyName });
+      setActing(true);
+      const result = await disableIpAccessSecurityPolicyForRoute({
+        cluster,
+        namespace,
+        securityPolicy,
+      });
       if (!result.isSuccess) {
         notifyError(
           result.errorMessage
@@ -257,8 +265,6 @@ export default function IpAccessSection({
       notifySuccess('IP access control disabled');
       setOpenEdit(false);
       setValidationErrors([]);
-      await refresh();
-      onChanged?.();
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
@@ -267,7 +273,7 @@ export default function IpAccessSection({
           : 'Failed to disable IP access control'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
@@ -294,7 +300,7 @@ export default function IpAccessSection({
         <Stack spacing={1}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Host:</Typography>
-            <Typography variant="body2">{host || '-'}</Typography>
+            <Typography variant="body2">{httpRoute.spec?.hostnames?.[0] || '-'}</Typography>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">HTTPRoute:</Typography>
@@ -545,4 +551,157 @@ export default function IpAccessSection({
       </Dialog>
     </Paper>
   );
+}
+
+function buildAuthorizationRules(
+  allowCidrs: string[],
+  denyCidrs: string[],
+  forPatch = false
+): { authorization: { rules: unknown[] } } | { authorization: null } | {} {
+  const rules: any[] = [];
+  if (allowCidrs?.length) {
+    rules.push({
+      name: 'allow-source-ips',
+      principal: { clientCIDRs: allowCidrs },
+      action: 'Allow',
+    });
+  }
+  if (denyCidrs?.length) {
+    rules.push({
+      name: 'deny-source-ips',
+      principal: { clientCIDRs: denyCidrs },
+      action: 'Deny',
+    });
+  }
+  if (rules.length === 0) {
+    return forPatch ? { authorization: null } : {};
+  }
+  return { authorization: { rules } };
+}
+
+async function createOrUpdateIpAccessSecurityPolicyForRoute(params: {
+  cluster: string;
+  namespace: string;
+  policyName: string;
+  httpRoute: KubeHTTPRoute;
+  allowCidrs: string[];
+  denyCidrs: string[];
+  existingSecurityPolicy: SecurityPolicy | null;
+}): Promise<void> {
+  const {
+    cluster,
+    namespace,
+    policyName,
+    httpRoute,
+    allowCidrs,
+    denyCidrs,
+    existingSecurityPolicy,
+  } = params;
+
+  if (!httpRoute?.metadata?.name) {
+    throw new Error('HTTPRoute is missing required metadata');
+  }
+
+  if (existingSecurityPolicy?.jsonData?.metadata?.name) {
+    await SecurityPolicy.apiEndpoint.put(
+      {
+        ...existingSecurityPolicy.jsonData,
+        spec: {
+          ...(existingSecurityPolicy.spec ?? {}),
+          ...buildAuthorizationRules(allowCidrs || [], denyCidrs || [], true),
+        },
+      },
+      {},
+      cluster
+    );
+    return;
+  }
+
+  const ownerRef = buildHttpRouteOwnerRefFromRoute(httpRoute);
+
+  await SecurityPolicy.apiEndpoint.post(
+    {
+      apiVersion: 'gateway.envoyproxy.io/v1alpha1',
+      kind: 'SecurityPolicy',
+      metadata: {
+        name: policyName,
+        namespace,
+        ...(ownerRef ? { ownerReferences: [ownerRef] } : {}),
+      },
+      spec: {
+        targetRefs: [
+          {
+            group: 'gateway.networking.k8s.io',
+            kind: 'HTTPRoute',
+            name: httpRoute.metadata.name,
+          },
+        ],
+        ...buildAuthorizationRules(allowCidrs || [], denyCidrs || [], false),
+      },
+    },
+    {},
+    cluster
+  );
+}
+
+async function updateIpAccessSecurityPolicyForRoute(params: {
+  cluster: string;
+  namespace: string;
+  securityPolicy: SecurityPolicy;
+  allowCidrs: string[];
+  denyCidrs: string[];
+}): Promise<ApiResult> {
+  const { cluster, securityPolicy, allowCidrs, denyCidrs } = params;
+
+  if (!securityPolicy.jsonData?.metadata?.name) {
+    return { isSuccess: false, errorMessage: 'SecurityPolicy not found' };
+  }
+
+  try {
+    await SecurityPolicy.apiEndpoint.put(
+      {
+        ...securityPolicy.jsonData,
+        spec: {
+          ...(securityPolicy.spec ?? {}),
+          ...buildAuthorizationRules(allowCidrs || [], denyCidrs || [], true),
+        },
+      },
+      {},
+      cluster
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
+}
+
+async function disableIpAccessSecurityPolicyForRoute(params: {
+  cluster: string;
+  namespace: string;
+  securityPolicy: SecurityPolicy;
+}): Promise<ApiResult> {
+  const { cluster, securityPolicy } = params;
+
+  if (!securityPolicy.metadata?.name) {
+    return { isSuccess: true };
+  }
+
+  try {
+    await SecurityPolicy.apiEndpoint.put(
+      {
+        ...securityPolicy.jsonData,
+        spec: {
+          ...(securityPolicy.spec ?? {}),
+          authorization: null,
+        },
+      },
+      {},
+      cluster
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }

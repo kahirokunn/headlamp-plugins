@@ -16,25 +16,27 @@ import {
 import { ValidationAlert } from '../common/ValidationAlert';
 import { useNotify } from '../common/notifications/useNotify';
 import {
-  createRetryBackendTrafficPolicy,
-  detectRetryConfig,
-  updateRetryBackendTrafficPolicy,
-} from '../../api/envoy';
-import { deleteRetryBackendTrafficPolicy } from '../../api/envoy';
+  BackendTrafficPolicy,
+  type EnvoyBackendTrafficPolicy,
+} from '../../resources/envoyGateway/backendTrafficPolicy';
+import { buildHttpRouteOwnerRefFromRoute, findBackendTrafficPolicyForHTTPRoute } from './common';
+import type { KubeHTTPRoute } from '@kinvolk/headlamp-plugin/lib/lib/k8s/httpRoute';
 
-export default function RetrySection({
-  namespace,
-  host,
-  onChanged,
+type BackendTrafficPolicyResource = EnvoyBackendTrafficPolicy;
+
+type ApiResult = {
+  isSuccess: boolean;
+  errorMessage?: string;
+};
+
+export function RetrySection({
+  cluster,
+  httpRoute,
 }: {
-  namespace: string;
-  host: string;
-  onChanged?: () => void;
+  cluster: string;
+  httpRoute: KubeHTTPRoute;
 }) {
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [httpRouteName, setHttpRouteName] = React.useState<string | null>(null);
-  const [policyName, setPolicyName] = React.useState<string | null>(null);
+  const [acting, setActing] = React.useState(false);
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
 
   const [numRetries, setNumRetries] = React.useState<number>(5);
@@ -49,6 +51,77 @@ export default function RetrySection({
 
   const { notifySuccess, notifyError } = useNotify();
 
+  const namespace = httpRoute.metadata?.namespace!;
+
+  const backendPolicyListResult = BackendTrafficPolicy.useList({ cluster, namespace });
+
+  const backendPolicies = (backendPolicyListResult.items ?? []) as BackendTrafficPolicyResource[];
+
+  const httpRouteName = httpRoute.metadata?.name ?? null;
+
+  const backendPolicy = React.useMemo(
+    () =>
+      httpRouteName ? findBackendTrafficPolicyForHTTPRoute(backendPolicies, httpRouteName) : null,
+    [backendPolicies, httpRouteName]
+  );
+
+  const policyName = backendPolicy?.metadata?.name ?? null;
+  const retrySpec = backendPolicy?.spec?.retry;
+
+  const currentNumRetries = retrySpec?.numRetries ?? null;
+  const currentBaseInterval = retrySpec?.perRetry?.backOff?.baseInterval ?? '100ms';
+  const currentMaxInterval = retrySpec?.perRetry?.backOff?.maxInterval ?? '10s';
+  const currentTimeout = retrySpec?.perRetry?.timeout ?? '250ms';
+  const currentStatusCodes =
+    retrySpec?.retryOn?.httpStatusCodes && retrySpec.retryOn.httpStatusCodes.length
+      ? retrySpec.retryOn.httpStatusCodes.join(',')
+      : '';
+  const currentTriggers =
+    retrySpec?.retryOn?.triggers && retrySpec.retryOn.triggers.length
+      ? retrySpec.retryOn.triggers.join(',')
+      : '';
+
+  React.useEffect(() => {
+    if (openEnable || openEdit) {
+      return;
+    }
+
+    if (currentNumRetries != null) {
+      setNumRetries(currentNumRetries);
+    } else {
+      setNumRetries(5);
+    }
+    setBaseInterval(currentBaseInterval || '100ms');
+    setMaxInterval(currentMaxInterval || '10s');
+    setTimeoutVal(currentTimeout || '250ms');
+    if (currentStatusCodes) {
+      setHttpStatusCodes(currentStatusCodes);
+    } else {
+      setHttpStatusCodes('500');
+    }
+    if (currentTriggers) {
+      setTriggers(currentTriggers);
+    } else {
+      setTriggers('connect-failure,retriable-status-codes');
+    }
+  }, [
+    currentNumRetries,
+    currentBaseInterval,
+    currentMaxInterval,
+    currentTimeout,
+    currentStatusCodes,
+    currentTriggers,
+    openEnable,
+    openEdit,
+    namespace,
+  ]);
+
+  const configured = !!(httpRouteName && policyName);
+  const dataLoading = backendPolicyListResult.isLoading;
+  const loading = acting || dataLoading;
+
+  const error = (backendPolicyListResult.error as { message?: string } | null)?.message ?? null;
+
   function parseNumberList(input: string): number[] {
     return input
       .split(',')
@@ -62,8 +135,12 @@ export default function RetrySection({
     if (!policyName) return;
     if (!window.confirm('Disable Retry configuration?')) return;
     try {
-      setLoading(true);
-      const result = await deleteRetryBackendTrafficPolicy({ namespace, policyName });
+      setActing(true);
+      const result = await deleteRetryBackendTrafficPolicyForRoute({
+        cluster,
+        namespace,
+        policyName,
+      });
       if (!result.isSuccess) {
         notifyError(
           result.errorMessage
@@ -75,15 +152,13 @@ export default function RetrySection({
       notifySuccess('Retry config disabled');
       setOpenEdit(false);
       setValidationErrors([]);
-      await refresh();
-      onChanged?.();
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
         detail ? `Failed to disable Retry config: ${detail}` : 'Failed to disable Retry config'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
@@ -93,33 +168,6 @@ export default function RetrySection({
       .map(s => s.trim())
       .filter(Boolean);
   }
-
-  async function refresh() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await detectRetryConfig(namespace, host);
-      setHttpRouteName(res.httpRoute?.metadata?.name ?? null);
-      setPolicyName(res.backendTrafficPolicy?.metadata?.name ?? null);
-      if (res.numRetries != null) setNumRetries(res.numRetries);
-      if (res.baseInterval) setBaseInterval(res.baseInterval);
-      if (res.maxInterval) setMaxInterval(res.maxInterval);
-      if (res.timeout) setTimeoutVal(res.timeout);
-      if (res.httpStatusCodes?.length) setHttpStatusCodes(res.httpStatusCodes.join(','));
-      if (res.triggers?.length) setTriggers(res.triggers.join(','));
-    } catch (e) {
-      setError((e as Error)?.message || 'Failed to detect Retry config');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  React.useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace, host]);
-
-  const configured = !!(httpRouteName && policyName);
 
   function validate(): string | null {
     if (!Number.isFinite(numRetries) || numRetries < 0)
@@ -131,7 +179,7 @@ export default function RetrySection({
   }
 
   async function handleEnable() {
-    if (!httpRouteName) return;
+    if (!httpRoute || !httpRouteName) return;
     const err = validate();
     if (err) {
       setValidationErrors([err]);
@@ -139,11 +187,12 @@ export default function RetrySection({
     }
     setValidationErrors([]);
     try {
-      setLoading(true);
-      const policy = await createRetryBackendTrafficPolicy({
+      setActing(true);
+      await createRetryBackendTrafficPolicyForRoute({
+        cluster,
         namespace,
+        httpRoute,
         policyName: httpRouteName,
-        httpRouteName,
         numRetries,
         baseInterval,
         maxInterval,
@@ -154,21 +203,18 @@ export default function RetrySection({
       notifySuccess('Retry config enabled');
       setOpenEnable(false);
       setValidationErrors([]);
-      setPolicyName(policy.metadata.name);
-      await refresh();
-      onChanged?.();
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
         detail ? `Failed to enable Retry config: ${detail}` : 'Failed to enable Retry config'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
   async function handleSave() {
-    if (!policyName) return;
+    if (!policyName || !backendPolicy) return;
     const err = validate();
     if (err) {
       setValidationErrors([err]);
@@ -176,10 +222,12 @@ export default function RetrySection({
     }
     setValidationErrors([]);
     try {
-      setLoading(true);
-      const result = await updateRetryBackendTrafficPolicy({
+      setActing(true);
+      const result = await updateRetryBackendTrafficPolicyForRoute({
+        cluster,
         namespace,
         policyName,
+        backendPolicy,
         numRetries,
         baseInterval,
         maxInterval,
@@ -198,15 +246,13 @@ export default function RetrySection({
       notifySuccess('Retry config updated');
       setOpenEdit(false);
       setValidationErrors([]);
-      await refresh();
-      onChanged?.();
     } catch (e) {
       const detail = (e as Error)?.message?.trim();
       notifyError(
         detail ? `Failed to update Retry config: ${detail}` : 'Failed to update Retry config'
       );
     } finally {
-      setLoading(false);
+      setActing(false);
     }
   }
 
@@ -233,7 +279,7 @@ export default function RetrySection({
         <Stack spacing={1}>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">Host:</Typography>
-            <Typography variant="body2">{host || '-'}</Typography>
+            <Typography variant="body2">{httpRoute.spec?.hostnames?.[0] || '-'}</Typography>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Typography variant="subtitle2">HTTPRoute:</Typography>
@@ -452,4 +498,136 @@ export default function RetrySection({
       </Dialog>
     </Paper>
   );
+}
+
+async function createRetryBackendTrafficPolicyForRoute(params: {
+  cluster: string;
+  namespace: string;
+  httpRoute: KubeHTTPRoute;
+  policyName: string;
+  numRetries: number;
+  baseInterval?: string;
+  maxInterval?: string;
+  timeout?: string;
+  httpStatusCodes?: number[];
+  triggers?: string[];
+}): Promise<BackendTrafficPolicyResource> {
+  const ownerRef = buildHttpRouteOwnerRefFromRoute(params.httpRoute);
+
+  const body = BackendTrafficPolicy.getBaseObject();
+  body.metadata.name = params.policyName;
+  body.metadata.namespace = params.namespace;
+  if (ownerRef) {
+    body.metadata.ownerReferences = [ownerRef];
+  }
+  body.spec = {
+    targetRefs: [
+      {
+        group: 'gateway.networking.k8s.io',
+        kind: 'HTTPRoute',
+        name: params.httpRoute.metadata?.name ?? params.policyName,
+      },
+    ],
+    retry: {
+      numRetries: params.numRetries,
+      perRetry: {
+        backOff: {
+          baseInterval: params.baseInterval || '100ms',
+          maxInterval: params.maxInterval || '10s',
+        },
+        timeout: params.timeout || '250ms',
+      },
+      retryOn: {
+        httpStatusCodes:
+          params.httpStatusCodes && params.httpStatusCodes.length ? params.httpStatusCodes : [500],
+        triggers:
+          params.triggers && params.triggers.length
+            ? params.triggers
+            : ['connect-failure', 'retriable-status-codes'],
+      },
+    },
+  };
+
+  await BackendTrafficPolicy.apiEndpoint.post(body, {}, params.cluster);
+  return body;
+}
+
+async function updateRetryBackendTrafficPolicyForRoute(params: {
+  cluster: string;
+  namespace: string;
+  policyName: string;
+  backendPolicy: BackendTrafficPolicyResource;
+  numRetries: number;
+  baseInterval?: string;
+  maxInterval?: string;
+  timeout?: string;
+  httpStatusCodes?: number[];
+  triggers?: string[];
+}): Promise<ApiResult> {
+  const {
+    backendPolicy,
+    numRetries,
+    baseInterval,
+    maxInterval,
+    timeout,
+    httpStatusCodes,
+    triggers,
+  } = params;
+
+  if (!backendPolicy.metadata?.name) {
+    return { isSuccess: false, errorMessage: 'BackendTrafficPolicy not found' };
+  }
+
+  try {
+    await BackendTrafficPolicy.apiEndpoint.put(
+      {
+        ...backendPolicy,
+        spec: {
+          ...(backendPolicy.spec ?? {}),
+          retry: {
+            numRetries,
+            perRetry: {
+              backOff: {
+                baseInterval: baseInterval || '100ms',
+                maxInterval: maxInterval || '10s',
+              },
+              timeout: timeout || '250ms',
+            },
+            retryOn: {
+              httpStatusCodes: httpStatusCodes && httpStatusCodes.length ? httpStatusCodes : [500],
+              triggers:
+                triggers && triggers.length
+                  ? triggers
+                  : ['connect-failure', 'retriable-status-codes'],
+            },
+          },
+        },
+      },
+      {},
+      params.cluster
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
+}
+
+async function deleteRetryBackendTrafficPolicyForRoute(params: {
+  cluster: string;
+  namespace: string;
+  policyName: string;
+}): Promise<ApiResult> {
+  try {
+    await BackendTrafficPolicy.apiEndpoint.delete(
+      params.namespace,
+      params.policyName,
+      undefined,
+      params.cluster
+    );
+    return { isSuccess: true };
+  } catch (e) {
+    const message = (e as Error)?.message?.trim();
+    return { isSuccess: false, errorMessage: message };
+  }
 }
