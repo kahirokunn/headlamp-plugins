@@ -16,10 +16,11 @@
   ],
   "ignoreDependencies": [
     "react",
-    "react-redux",
     "@mui/material",
     "@iconify/react",
     "notistack",
-    "js-yaml"
+    "react-router-dom",
+    "lodash",
+    "@xterm/xterm"
   ]
 }

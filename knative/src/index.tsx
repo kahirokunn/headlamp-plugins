@@ -15,16 +15,10 @@
  */
 
 import { addIcon } from '@iconify/react';
-import type { ReactNode } from 'react';
-import { Provider } from 'react-redux';
 import { registerRoute, registerSidebarEntry } from '@kinvolk/headlamp-plugin/lib';
-import { knativeStore } from './store';
-import KnativeServicesList from './components/KnativeServicesList';
-import KnativeNetworkingOverview from './components/KnativeNetworkingOverview';
-
-function KnativeStoreProvider({ children }: { children: ReactNode }) {
-  return <Provider store={knativeStore}>{children}</Provider>;
-}
+import { KServicesList } from './components/kservices/List';
+import { KServiceDetail } from './components/kservices/Detail';
+import { NetworkingOverview } from './components/networking/Overview';
 
 addIcon('custom:knative', {
   body: `<svg viewBox="0 0 735 593.5" xmlns="http://www.w3.org/2000/svg">
@@ -61,23 +55,22 @@ registerSidebarEntry({
 });
 
 registerRoute({
+  path: '/knative/services/:namespace/:name',
+  sidebar: 'kservices',
+  name: 'kserviceDetails',
+  component: KServiceDetail,
+});
+
+registerRoute({
   path: '/knative/services',
   sidebar: 'kservices',
   name: 'kservices',
-  component: () => (
-    <KnativeStoreProvider>
-      <KnativeServicesList />
-    </KnativeStoreProvider>
-  ),
+  component: KServicesList,
 });
 
 registerRoute({
   path: '/knative/networking',
   sidebar: 'knetworking',
   name: 'knetworking',
-  component: () => (
-    <KnativeStoreProvider>
-      <KnativeNetworkingOverview />
-    </KnativeStoreProvider>
-  ),
+  component: NetworkingOverview,
 });

@@ -1,13 +1,13 @@
 import { KubeObject, type KubeObjectInterface } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
 
-export interface ClusterDomainClaimResource extends KubeObjectInterface {
+interface ClusterDomainClaimResource extends KubeObjectInterface {
   spec: {
     namespace: string;
   };
   status?: Record<string, unknown>;
 }
 
-export class ClusterDomainClaimObject extends KubeObject<ClusterDomainClaimResource> {
+export class ClusterDomainClaim extends KubeObject<ClusterDomainClaimResource> {
   static kind = 'ClusterDomainClaim';
   static apiName = 'clusterdomainclaims';
   static apiVersion = 'networking.internal.knative.dev/v1alpha1';

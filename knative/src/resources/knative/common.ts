@@ -1,4 +1,4 @@
-export type ConditionStatus = 'True' | 'False' | 'Unknown';
+type ConditionStatus = 'True' | 'False' | 'Unknown';
 
 export interface Condition {
   type: string;

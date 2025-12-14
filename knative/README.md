@@ -16,12 +16,8 @@ Go to the Plugin Catalog, search for the Knative plugin, and click the Install b
 
 ## Demo
 
-<video src="https://raw.githubusercontent.com/kahirokunn/headlamp-plugins/main/knative/assets/headlamp-knative-plugin-demo.mp4" controls width="800">
+<video src="https://github.com/user-attachments/assets/a5c9cac3-f711-4306-84cd-83178fc876e0" controls width="800">
   Your browser does not support the video tag.
 </video>
 
-<video src="https://github.com/user-attachments/assets/c30486db-4c91-4634-9e2e-a1fba3f3b034" controls width="800">
-  Your browser does not support the video tag.
-</video>
-
-Watch: https://github.com/user-attachments/assets/c30486db-4c91-4634-9e2e-a1fba3f3b034
+Watch: https://github.com/user-attachments/assets/a5c9cac3-f711-4306-84cd-83178fc876e0
